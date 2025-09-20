@@ -1,0 +1,6 @@
+numpy
+lightkurve
+astropy
+sklearn
+torch
+warnings
