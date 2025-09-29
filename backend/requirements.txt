@@ -1,6 +1,6 @@
 numpy
 lightkurve
 astropy
-sklearn
+scikit-learn
 torch
 warnings
