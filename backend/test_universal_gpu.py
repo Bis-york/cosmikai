@@ -5,22 +5,118 @@ from sklearn.metrics import average_precision_score, precision_recall_curve
 import torch, torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import warnings
+import platform
+import sys
+
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
-# GPU setup and diagnostics
-print("[INFO] Checking GPU availability...")
-if torch.cuda.is_available():
-    print(f"[INFO] ✅ CUDA is available! Found {torch.cuda.device_count()} GPU(s)")
-    for i in range(torch.cuda.device_count()):
-        gpu_name = torch.cuda.get_device_name(i)
-        gpu_memory = torch.cuda.get_device_properties(i).total_memory / 1024**3
-        print(f"[INFO] GPU {i}: {gpu_name} ({gpu_memory:.1f} GB)")
-    # Set memory allocation strategy for better GPU utilization
-    torch.backends.cudnn.benchmark = True
-    torch.backends.cudnn.deterministic = False
-else:
-    print("[WARN] ❌ CUDA not available. Install PyTorch with CUDA support for GPU acceleration.")
-    print("[WARN] Will run on CPU - this will be significantly slower.")
+# Universal GPU setup and diagnostics
+def detect_and_setup_device():
+    """Detect and configure the best available compute device (CUDA, Metal, ROCm, or CPU)"""
+    print("[INFO] 🔍 Detecting available compute devices...")
+    
+    # Check system info
+    system = platform.system()
+    print(f"[INFO] Operating System: {system}")
+    print(f"[INFO] Python: {sys.version}")
+    print(f"[INFO] PyTorch: {torch.__version__}")
+    
+    device_info = {}
+    
+    # 1. NVIDIA CUDA (Windows, Linux, Mac with NVIDIA eGPU)
+    if torch.cuda.is_available():
+        device_info['cuda'] = {
+            'available': True,
+            'device_count': torch.cuda.device_count(),
+            'devices': []
+        }
+        
+        for i in range(torch.cuda.device_count()):
+            gpu_name = torch.cuda.get_device_name(i)
+            gpu_memory = torch.cuda.get_device_properties(i).total_memory / 1024**3
+            device_info['cuda']['devices'].append({
+                'id': i,
+                'name': gpu_name,
+                'memory_gb': gpu_memory
+            })
+        
+        print(f"[INFO] ✅ NVIDIA CUDA: Found {device_info['cuda']['device_count']} GPU(s)")
+        for device in device_info['cuda']['devices']:
+            print(f"[INFO]   GPU {device['id']}: {device['name']} ({device['memory_gb']:.1f} GB)")
+    else:
+        device_info['cuda'] = {'available': False}
+        print("[INFO] ❌ NVIDIA CUDA: Not available")
+    
+    # 2. Apple Metal Performance Shaders (Mac M1/M2/M3)
+    if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        device_info['mps'] = {'available': True}
+        print("[INFO] ✅ Apple Metal (MPS): Available")
+        print("[INFO]   Using Apple Silicon GPU acceleration")
+    else:
+        device_info['mps'] = {'available': False}
+        if system == "Darwin":  # macOS
+            print("[INFO] ❌ Apple Metal (MPS): Not available (requires PyTorch 1.12+ and macOS 12.3+)")
+        else:
+            print("[INFO] ➖ Apple Metal (MPS): Not applicable (not macOS)")
+    
+    # 3. AMD ROCm (Linux primarily)
+    rocm_available = False
+    try:
+        # Check if ROCm backend is available
+        hip_version = getattr(torch.version, 'hip', None) # type: ignore
+        if hip_version is not None:
+            rocm_available = True
+            device_info['rocm'] = {'available': True}
+            print(f"[INFO] ✅ AMD ROCm: Available (HIP version: {hip_version})")
+        else:
+            device_info['rocm'] = {'available': False}
+            print("[INFO] ❌ AMD ROCm: Not available")
+    except:
+        device_info['rocm'] = {'available': False}
+        print("[INFO] ❌ AMD ROCm: Not available")
+    
+    # 4. Select best device
+    if device_info['cuda']['available']:
+        device = torch.device("cuda:0")
+        device_type = "NVIDIA CUDA"
+        use_amp = True  # Automatic Mixed Precision
+        if (
+            device_info['cuda']['available']
+            and isinstance(device_info['cuda'].get('devices', None), list)
+            and len(device_info['cuda']['devices']) > 0 # type: ignore
+        ):
+            print(f"[INFO] 🚀 Selected: {device_type} - {device_info['cuda']['devices'][0]['name']}") # type: ignore
+        else:
+            print(f"[INFO] 🚀 Selected: {device_type}")
+        
+        # CUDA optimizations
+        torch.backends.cudnn.benchmark = True
+        torch.backends.cudnn.deterministic = False
+        torch.cuda.empty_cache()
+        
+    elif device_info['mps']['available']:
+        device = torch.device("mps")
+        device_type = "Apple Metal"
+        use_amp = False  # MPS doesn't support AMP yet
+        print(f"[INFO] 🚀 Selected: {device_type} - Apple Silicon GPU")
+        
+    elif device_info['rocm']['available']:
+        device = torch.device("cuda:0")  # ROCm uses cuda device interface
+        device_type = "AMD ROCm"
+        use_amp = True  # ROCm supports AMP
+        print(f"[INFO] 🚀 Selected: {device_type} - AMD GPU")
+        
+    else:
+        device = torch.device("cpu")
+        device_type = "CPU"
+        use_amp = False
+        print(f"[INFO] ⚠️  Selected: {device_type} - No GPU acceleration available")
+        print(f"[INFO] 💡 For better performance, install:")
+        print(f"[INFO]    • NVIDIA GPU: pip install torch --index-url https://download.pytorch.org/whl/cu121")
+        print(f"[INFO]    • Apple Silicon: pip install torch")
+        print(f"[INFO]    • AMD GPU: pip install torch --index-url https://download.pytorch.org/whl/rocm5.7")
+    
+    return device, device_type, use_amp, device_info
 
 # ---------------------------
 # 1) Lightkurve: fetch & clean
@@ -147,7 +243,7 @@ class FoldedDataset(Dataset):
         self.X = np.stack(self.X).astype(np.float32)
         self.y = np.array(self.y, dtype=np.float32)
         print(f"[INFO] Dataset creation complete!")
-        print(f"[INFO] Final dataset: X={self.X.shape}, positives={int(self.y.sum())}, negatives={int((1-self.y).sum())}")
+        print(f"[INFO] Final dataset: X={self.X.shape}, positives={int(np.sum(self.y))}, negatives={int(len(self.y) - np.sum(self.y))}")
         
         # Warn if dataset is very small
         if len(self.X) < 20:
@@ -158,7 +254,7 @@ class FoldedDataset(Dataset):
         return torch.from_numpy(self.X[i]), torch.tensor(self.y[i])
 
 # ---------------------------
-# 5) Tiny 1D-CNN
+# 5) Tiny 1D-CNN (Universal GPU compatible)
 # ---------------------------
 class SmallCNN(nn.Module):
     def __init__(self, L):
@@ -176,11 +272,12 @@ class SmallCNN(nn.Module):
         return self.head(f).squeeze(1) # (B,)
 
 # ---------------------------
-# 6) Train
+# 6) Universal GPU Training
 # ---------------------------
-def train_detector(targets, mission, nbins, epochs, batch, pos_mult):
+def train_detector(targets, mission, nbins, epochs, batch, pos_mult, device, device_type, use_amp):
     print(f"[INFO] Starting training process...")
     print(f"[INFO] Training parameters: {epochs} epochs, batch size {batch}, {pos_mult} positives per target")
+    print(f"[INFO] Compute device: {device_type} ({device})")
     
     ds = FoldedDataset(targets, mission=mission, nbins=nbins,
                        neg_per_target=1, pos_per_target=pos_mult)
@@ -195,35 +292,37 @@ def train_detector(targets, mission, nbins, epochs, batch, pos_mult):
     print(f"[INFO] Splitting dataset: {n_tr} training samples, {n_val} validation samples")
     ds_tr, ds_val = torch.utils.data.random_split(ds, [n_tr, n_val], generator=torch.Generator().manual_seed(42))
 
-    print(f"[INFO] Creating data loaders with GPU optimizations...")
-    # Optimize data loading for GPU
-    num_workers = 4 if torch.cuda.is_available() else 2
-    pin_memory = torch.cuda.is_available()
-    dl_tr = DataLoader(ds_tr, batch_size=batch, shuffle=True, num_workers=num_workers, pin_memory=pin_memory, persistent_workers=True)
-    dl_val = DataLoader(ds_val, batch_size=batch, shuffle=False, num_workers=num_workers, pin_memory=pin_memory, persistent_workers=True)
-
-    # GPU device selection and optimization
-    if torch.cuda.is_available():
-        device = torch.device("cuda:0")  # Use first GPU
-        print(f"[INFO] Using GPU: {torch.cuda.get_device_name(0)}")
-        print(f"[INFO] GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
-        # Clear GPU cache before training
-        torch.cuda.empty_cache()
-    else:
-        device = torch.device("cpu")
-        print(f"[INFO] Using CPU (consider installing CUDA PyTorch for GPU acceleration)")
+    print(f"[INFO] Creating data loaders with {device_type} optimizations...")
     
+    # Optimize data loading based on device type
+    if device.type == "cuda":  # NVIDIA CUDA or AMD ROCm
+        num_workers = 4
+        pin_memory = True
+        persistent_workers = True
+    elif device.type == "mps":  # Apple Metal
+        num_workers = 0  # MPS works better with single-threaded data loading
+        pin_memory = False
+        persistent_workers = False
+    else:  # CPU
+        num_workers = 2
+        pin_memory = False
+        persistent_workers = True
+    
+    dl_tr = DataLoader(ds_tr, batch_size=batch, shuffle=True, num_workers=num_workers, 
+                       pin_memory=pin_memory, persistent_workers=persistent_workers)
+    dl_val = DataLoader(ds_val, batch_size=batch, shuffle=False, num_workers=num_workers, 
+                        pin_memory=pin_memory, persistent_workers=persistent_workers)
+
     print(f"[INFO] Initializing CNN model with input size {nbins}...")
     model = SmallCNN(nbins).to(device)
     
-    # Enable mixed precision training for NVIDIA GPUs
-    use_amp = torch.cuda.is_available()
-    scaler = None
-    if use_amp:
-        print(f"[INFO] ✅ Enabling Automatic Mixed Precision (AMP) for faster GPU training")
-        scaler = torch.cuda.amp.GradScaler()
-    else:
-        print(f"[INFO] Mixed precision not available on CPU")
+    # Show device memory info
+    if device.type == "cuda":
+        if torch.cuda.is_available():
+            print(f"[INFO] GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+            torch.cuda.empty_cache()
+    elif device.type == "mps":
+        print(f"[INFO] Using Apple Metal Performance Shaders")
     
     pos_frac = float(np.mean(ds.y))
     pos_weight = torch.tensor([(1 - pos_frac) / max(pos_frac, 1e-6)], device=device)
@@ -231,22 +330,38 @@ def train_detector(targets, mission, nbins, epochs, batch, pos_mult):
     
     loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     opt = torch.optim.Adam(model.parameters(), lr=1e-3)
+    
+    # Setup mixed precision training (CUDA and ROCm only)
+    scaler = None
+    if use_amp:
+        print(f"[INFO] ✅ Enabling Automatic Mixed Precision (AMP) for faster training")
+        scaler = torch.cuda.amp.GradScaler()
+    else:
+        print(f"[INFO] Using full precision training")
+    
     print(f"[INFO] Starting training for {epochs} epochs...")
     
     final_auprc = 0.0  # Initialize final AUPRC
 
     for ep in range(1, epochs + 1):
         print(f"[INFO] Epoch {ep}/{epochs} - Training phase...")
-        if torch.cuda.is_available():
+        
+        # Show memory usage for GPU devices
+        if device.type == "cuda" and torch.cuda.is_available():
             print(f"[INFO] GPU Memory before epoch: {torch.cuda.memory_allocated(0) / 1024**2:.1f} MB")
         
         model.train(); tot = 0.0
         batch_count = 0
         for X, y in dl_tr:
-            X, y = X.to(device, non_blocking=True), y.to(device, non_blocking=True)
+            # Non-blocking transfer for CUDA, regular transfer for MPS/CPU
+            if device.type == "cuda":
+                X, y = X.to(device, non_blocking=True), y.to(device, non_blocking=True)
+            else:
+                X, y = X.to(device), y.to(device)
+            
             opt.zero_grad()
             
-            # Use mixed precision training for NVIDIA GPUs
+            # Use mixed precision training for supported devices
             if use_amp and scaler is not None:
                 with torch.cuda.amp.autocast():
                     logits = model(X)
@@ -264,7 +379,8 @@ def train_detector(targets, mission, nbins, epochs, batch, pos_mult):
             batch_count += 1
         
         print(f"[INFO] Epoch {ep} training complete. Processed {batch_count} batches")
-        if torch.cuda.is_available():
+        
+        if device.type == "cuda" and torch.cuda.is_available():
             print(f"[INFO] GPU Memory after training: {torch.cuda.memory_allocated(0) / 1024**2:.1f} MB")
 
         # Validation AUPRC
@@ -272,7 +388,11 @@ def train_detector(targets, mission, nbins, epochs, batch, pos_mult):
         model.eval(); ys, ps = [], []
         with torch.no_grad():
             for X, y in dl_val:
-                X = X.to(device, non_blocking=True)
+                if device.type == "cuda":
+                    X = X.to(device, non_blocking=True)
+                else:
+                    X = X.to(device)
+                
                 # Use mixed precision for inference too
                 if use_amp and scaler is not None:
                     with torch.cuda.amp.autocast():
@@ -285,8 +405,8 @@ def train_detector(targets, mission, nbins, epochs, batch, pos_mult):
         auprc = average_precision_score(ys, ps)
         print(f"[RESULT] Epoch {ep:02d} | train loss {tot/n_tr:.4f} | validation AUPRC {auprc:.3f}")
         
-        # Clear GPU cache after each epoch
-        if torch.cuda.is_available():
+        # Clear cache after each epoch for GPU devices
+        if device.type == "cuda" and torch.cuda.is_available():
             torch.cuda.empty_cache()
         
         # Store the final AUPRC for saving
@@ -294,8 +414,8 @@ def train_detector(targets, mission, nbins, epochs, batch, pos_mult):
 
     print(f"[INFO] Training complete!")
     
-    # Final GPU memory cleanup
-    if torch.cuda.is_available():
+    # Final memory cleanup and reporting
+    if device.type == "cuda" and torch.cuda.is_available():
         torch.cuda.empty_cache()
         print(f"[INFO] Final GPU Memory usage: {torch.cuda.memory_allocated(0) / 1024**2:.1f} MB")
         print(f"[INFO] Peak GPU Memory usage: {torch.cuda.max_memory_allocated(0) / 1024**2:.1f} MB")
@@ -303,12 +423,16 @@ def train_detector(targets, mission, nbins, epochs, batch, pos_mult):
     return model, ds, final_auprc
 
 # ---------------------------
-# 7) Demo: train & score a real target
+# 7) Demo: train & score a real target (Universal GPU)
 # ---------------------------
 if __name__ == "__main__":
-    print("="*60)
-    print("EXOPLANET TRANSIT DETECTION PIPELINE")
-    print("="*60)
+    print("="*70)
+    print("UNIVERSAL EXOPLANET TRANSIT DETECTION PIPELINE")
+    print("Supports: NVIDIA CUDA • Apple Metal • AMD ROCm • CPU")
+    print("="*70)
+    
+    # Detect and setup the best available device
+    device, device_type, use_amp, device_info = detect_and_setup_device()
     
     # Start with well-observed Kepler targets that actually exist in the archive
     training_targets = [
@@ -316,21 +440,20 @@ if __name__ == "__main__":
         "Kepler-3", "Kepler-4", "Kepler-5", "Kepler-6", "Kepler-7"
     ]
     
-    print(f"[INFO] Training on {len(training_targets)} stellar targets:")
+    print(f"\n[INFO] Training on {len(training_targets)} stellar targets:")
     for i, target in enumerate(training_targets, 1):
         print(f"  {i}. {target}")
     print()
     
     print("[PHASE 1] TRAINING THE NEURAL NETWORK")
-    print("-" * 40)
-    model, ds, final_auprc = train_detector(training_targets, mission="Kepler", nbins=512, epochs=8, batch=256, pos_mult=2)
-    
-    # Get device for inference
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print("-" * 50)
+    model, ds, final_auprc = train_detector(training_targets, mission="Kepler", nbins=512, 
+                                          epochs=8, batch=256, pos_mult=2, 
+                                          device=device, device_type=device_type, use_amp=use_amp)
 
     print()
     print("[PHASE 2] SCORING A NEW TARGET")
-    print("-" * 40)
+    print("-" * 50)
     # Score a brand-new star (Lightkurve fetch → BLS → fold → model score)
     target_to_score = "Kepler-10"
     print(f"[INFO] Now scoring target: {target_to_score}")
@@ -344,11 +467,11 @@ if __name__ == "__main__":
     print(f"[INFO] Step 3: Phase folding and binning...")
     pf = fold_to_bins(t, f, P, t0, nbins=512)
     
-    print(f"[INFO] Step 4: Running neural network inference...")
+    print(f"[INFO] Step 4: Running neural network inference on {device_type}...")
     with torch.no_grad():
         x = torch.from_numpy(pf).float().unsqueeze(0).to(device)
-        # Use mixed precision for inference if available
-        if torch.cuda.is_available():
+        # Use appropriate precision for inference
+        if device.type == "cuda" and use_amp:
             with torch.cuda.amp.autocast():
                 logits = model(x)
                 score = torch.sigmoid(logits).cpu().item()
@@ -356,25 +479,26 @@ if __name__ == "__main__":
             score = torch.sigmoid(model(x)).cpu().item()
     
     print()
-    print("="*60)
+    print("="*70)
     print("FINAL RESULT")
-    print("="*60)
+    print("="*70)
     print(f"Target: {target_to_score}")
     print(f"Planet-like confidence score: {score:.3f}")
+    print(f"Compute device used: {device_type}")
     if score > 0.5:
         print("🟢 HIGH confidence - likely contains a transit signal!")
     elif score > 0.3:
         print("🟡 MEDIUM confidence - possible transit signal")
     else:
         print("🔴 LOW confidence - unlikely to contain transits")
-    print("="*60)
+    print("="*70)
     
     print()
     print("[PHASE 3] SAVING THE TRAINED MODEL")
-    print("-" * 40)
+    print("-" * 50)
     
-    # Save the trained model
-    model_path = "trained_exoplanet_detector.pth"
+    # Save the trained model with device info
+    model_path = f"trained_exoplanet_detector_{device_type.lower().replace(' ', '_')}.pth"
     print(f"[INFO] Saving trained model to '{model_path}'...")
     torch.save({
         'model_state_dict': model.state_dict(),
@@ -384,20 +508,24 @@ if __name__ == "__main__":
         'final_auprc': final_auprc,
         'epochs_trained': 8,
         'dataset_size': len(ds),
+        'device_type': device_type,
+        'device_info': device_info,
+        'torch_version': torch.__version__,
+        'platform': platform.system()
     }, model_path)
     print(f"[INFO] ✅ Model saved successfully!")
     
     # Also save a standalone model file for easy loading
-    model_simple_path = "exoplanet_model_simple.pth"
+    model_simple_path = f"exoplanet_model_{device_type.lower().replace(' ', '_')}.pth"
     print(f"[INFO] Saving simple model file to '{model_simple_path}'...")
     torch.save(model.state_dict(), model_simple_path)
     
-    # Save dataset statistics for future reference
-    stats_path = "training_stats.txt"
+    # Save comprehensive training statistics
+    stats_path = f"training_stats_{device_type.lower().replace(' ', '_')}.txt"
     print(f"[INFO] Saving training statistics to '{stats_path}'...")
     with open(stats_path, 'w') as f:
-        f.write("EXOPLANET DETECTION MODEL - TRAINING STATISTICS\n")
-        f.write("=" * 50 + "\n\n")
+        f.write("UNIVERSAL EXOPLANET DETECTION MODEL - TRAINING STATISTICS\n")
+        f.write("=" * 60 + "\n\n")
         f.write(f"Training completed: {target_to_score}\n")
         f.write(f"Final validation AUPRC: {final_auprc:.3f}\n")
         f.write(f"Total dataset size: {len(ds)} samples\n")
@@ -405,10 +533,26 @@ if __name__ == "__main__":
         f.write(f"Negative samples: {len(ds.y) - int(np.sum(ds.y))}\n")
         f.write(f"Training targets: {', '.join(training_targets)}\n")
         f.write(f"Model architecture: SmallCNN (512 input)\n")
-        f.write(f"Training epochs: 8\n")
-        f.write(f"GPU used: {torch.cuda.is_available()}\n")
-        if torch.cuda.is_available():
-            f.write(f"GPU name: {torch.cuda.get_device_name(0)}\n")
+        f.write(f"Training epochs: 8\n\n")
+        
+        f.write("COMPUTE ENVIRONMENT\n")
+        f.write("-" * 20 + "\n")
+        f.write(f"Device used: {device_type} ({device})\n")
+        f.write(f"Mixed precision: {use_amp}\n")
+        f.write(f"Operating system: {platform.system()}\n")
+        f.write(f"Python version: {sys.version}\n")
+        f.write(f"PyTorch version: {torch.__version__}\n\n")
+        
+        f.write("DEVICE AVAILABILITY\n")
+        f.write("-" * 20 + "\n")
+        f.write(f"NVIDIA CUDA: {'✅' if device_info['cuda']['available'] else '❌'}\n")
+        f.write(f"Apple Metal: {'✅' if device_info['mps']['available'] else '❌'}\n")  
+        f.write(f"AMD ROCm: {'✅' if device_info['rocm']['available'] else '❌'}\n")
+        
+        if device_info['cuda']['available']:
+            f.write(f"\nCUDA DETAILS:\n")
+            for device_detail in device_info['cuda']['devices']:
+                f.write(f"  GPU {device_detail['id']}: {device_detail['name']} ({device_detail['memory_gb']:.1f} GB)\n")
     
     print(f"[INFO] ✅ Training statistics saved!")
     print()
@@ -417,7 +561,14 @@ if __name__ == "__main__":
     print(f"📁 Simple model: {model_simple_path}")  
     print(f"📁 Training stats: {stats_path}")
     print()
+    print("✨ UNIVERSAL GPU SUPPORT FEATURES:")
+    print("• 🟢 NVIDIA CUDA (Windows/Linux/Mac)")
+    print("• 🟢 Apple Metal (M1/M2/M3 Macs)")  
+    print("• 🟢 AMD ROCm (Linux)")
+    print("• 🟢 CPU fallback (all platforms)")
+    print()
     print("You can now use these files to:")
-    print("• Load the model in other scripts")
+    print("• Load the model on any supported platform")
     print("• Continue training from this checkpoint")
     print("• Deploy the model for real exoplanet detection")
+    print("• Share models across different GPU types")
