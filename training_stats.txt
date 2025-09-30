@@ -1,0 +1,13 @@
+EXOPLANET DETECTION MODEL - TRAINING STATISTICS
+==================================================
+
+Training completed: Kepler-10
+Final validation AUPRC: 1.000
+Total dataset size: 30 samples
+Positive samples: 20
+Negative samples: 10
+Training targets: Kepler-10, Kepler-8, Kepler-12, Kepler-1, Kepler-2, Kepler-3, Kepler-4, Kepler-5, Kepler-6, Kepler-7
+Model architecture: SmallCNN (512 input)
+Training epochs: 8
+GPU used: True
+GPU name: NVIDIA GeForce RTX 3060 Laptop GPU
