@@ -1,0 +1,9 @@
+{
+    "target_name": "Custom Star Analysis",
+    "use_lightkurve": false,
+    "csv_path": "path/to/your/lightcurve.csv",
+    "time_column": "time",
+    "flux_column": "flux",
+    "threshold": 0.3,
+    "nbins": 512
+}
