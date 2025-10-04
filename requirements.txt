@@ -4,3 +4,5 @@ astropy
 scikit-learn
 torch
 warnings
+fastapi
+uvicorn
