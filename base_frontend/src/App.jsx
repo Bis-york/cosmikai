@@ -243,15 +243,18 @@ const ExoplanetDetectionApp = () => {
   const [progressStep, setProgressStep] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
   const [modelStats, setModelStats] = useState({
-    accuracy: 0.87,
-    totalPredictions: 1247,
-    planetsFound: 342,
-    falsePositives: 23
+    accuracy_pct: null,
+    total_predictions: 0,
+    planets_found: 0,
+    false_positives: 0,
   });
   const [historyEntries, setHistoryEntries] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsError, setStatsError] = useState(null);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [statsRefreshKey, setStatsRefreshKey] = useState(0);
 
   // Mock detection function - replace with actual API call
   const API_BASE_URL = useMemo(
@@ -345,13 +348,9 @@ const runDetection = async () => {
       };
 
       setDetectionResults(detection);
-      setModelStats(prev => ({
-        ...prev,
-        totalPredictions: prev.totalPredictions + 1,
-        planetsFound: prev.planetsFound + (detection.hasCandidate ? 1 : 0),
-      }));
       setProgressStep(null);
       setHistoryRefreshKey((key) => key + 1);
+      setStatsRefreshKey((key) => key + 1);
     } catch (error) {
       console.error('Prediction request failed:', error);
       setDetectionResults({ error: error.message || 'Unknown error occurred' });
@@ -448,6 +447,42 @@ const runDetection = async () => {
       cancelled = true;
     };
   }, [activeTab, API_BASE_URL, historyRefreshKey]);
+
+  useEffect(() => {
+    if (activeTab !== 'statistics') return;
+    let cancelled = false;
+
+    const fetchStats = async () => {
+      setStatsLoading(true);
+      setStatsError(null);
+      try {
+        const res = await fetch(`${API_BASE_URL}/db/stats`);
+        if (!res.ok) {
+          throw new Error(await res.text());
+        }
+        const data = await res.json();
+        if (!cancelled && data) {
+          setModelStats({
+            accuracy_pct: typeof data.accuracy_pct === 'number' ? data.accuracy_pct : 0,
+            total_predictions: data.total_predictions ?? 0,
+            planets_found: data.planets_found ?? 0,
+            false_positives: data.false_positives ?? 0,
+          });
+        }
+      } catch (error) {
+        console.error('Failed to load stats:', error);
+        if (!cancelled) setStatsError(error.message || 'Failed to load statistics');
+      } finally {
+        if (!cancelled) setStatsLoading(false);
+      }
+    };
+
+    fetchStats();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, API_BASE_URL, statsRefreshKey]);
 
   // const FileUploadArea = () => (
     
@@ -640,28 +675,35 @@ const DetectionResults = () => {
           <BarChart3 className="h-5 w-5 mr-2 text-blue-600" />
           Model Performance
         </h3>
+        {statsError && (
+          <div className="mb-4 text-sm text-red-600">{statsError}</div>
+        )}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="text-center p-4 bg-green-50 rounded-lg">
             <div className="text-2xl font-bold text-green-600">
-              {(modelStats.accuracy * 100).toFixed(1)}%
+              {statsLoading
+                ? '—'
+                : modelStats.accuracy_pct != null
+                ? `${modelStats.accuracy_pct.toFixed(1)}%`
+                : '—'}
             </div>
             <div className="text-sm text-gray-600">Accuracy</div>
           </div>
           <div className="text-center p-4 bg-blue-50 rounded-lg">
             <div className="text-2xl font-bold text-blue-600">
-              {modelStats.totalPredictions}
+              {statsLoading ? '—' : modelStats.total_predictions}
             </div>
             <div className="text-sm text-gray-600">Total Predictions</div>
           </div>
           <div className="text-center p-4 bg-purple-50 rounded-lg">
             <div className="text-2xl font-bold text-purple-600">
-              {modelStats.planetsFound}
+              {statsLoading ? '—' : modelStats.planets_found}
             </div>
             <div className="text-sm text-gray-600">Planets Found</div>
           </div>
           <div className="text-center p-4 bg-red-50 rounded-lg">
             <div className="text-2xl font-bold text-red-600">
-              {modelStats.falsePositives}
+              {statsLoading ? '—' : modelStats.false_positives}
             </div>
             <div className="text-sm text-gray-600">False Positives</div>
           </div>

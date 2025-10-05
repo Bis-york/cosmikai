@@ -85,3 +85,33 @@ def database_status() -> Dict[str, Any]:
         return {"ok": True, "document_count": count}
     except PyMongoError as exc:
         return {"ok": False, "error": str(exc)}
+
+
+def prediction_stats() -> Dict[str, Any]:
+    total = 0
+    planets_found = 0
+    sum_confidence = 0.0
+
+    for doc in collection.find({}, {"results": 1}):
+        total += 1
+        results = doc.get("results") or []
+        first = results[0] if results else {}
+        try:
+            conf = float(first.get("confidence", 0) or 0)
+        except (TypeError, ValueError):
+            conf = 0.0
+        conf = max(0.0, min(conf, 1.0))
+        sum_confidence += conf
+
+        if first.get("has_candidate"):
+            planets_found += 1
+
+    accuracy_pct = (sum_confidence / total * 100.0) if total else 0.0
+    false_positives = max(total - planets_found, 0)
+
+    return {
+        "accuracy_pct": accuracy_pct,
+        "total_predictions": total,
+        "planets_found": planets_found,
+        "false_positives": false_positives,
+    }

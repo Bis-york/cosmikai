@@ -12,6 +12,7 @@ from backend.newMongo import (
     database_status,
     get_cached_result,
     list_cached_targets,
+    prediction_stats,
     save_result,
 )
 from backend.predict import process_json_input as run_lightcurve
@@ -164,6 +165,11 @@ async def get_star(target: str) -> Dict[str, Dict[str, Any]]:
         return _coerce_config(cached)
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/db/stats")
+async def mongo_stats() -> Dict[str, Any]:
+    return prediction_stats()
 
 
 @app.post("/predict")
