@@ -1,7 +1,7 @@
 {
-    "target_name": "Kepler-10",
-    "mission": "Kepler",
-    "use_lightkurve": true,
-    "threshold": 0.5,
-    "nbins": 512
+  "target_name": "TIC 206544316",
+  "mission": "TESS",
+  "author": "SPOC",
+  "nbins": 256,
+  "threshold": 0.5
 }

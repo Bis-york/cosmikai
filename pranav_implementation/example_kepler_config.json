@@ -1,0 +1,7 @@
+{
+  "target_name": "Kepler-10",
+  "mission": "Kepler",
+  "nbins": 512,
+  "threshold": 0.5,
+  "label": "Kepler-10 (Known Exoplanet Host)"
+}
