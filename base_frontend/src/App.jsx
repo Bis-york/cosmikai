@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Upload, FileText, BarChart3, Settings, Zap, TrendingUp, AlertCircle, CheckCircle, XCircle, Eye, Download } from 'lucide-react';
 import OrbitVisualizer from './OrbitVisualiser';
+import logoBlack from './assets/logo-transp.png';
 
 const FileUploadArea = ({ 
   inputMode, 
@@ -827,7 +828,11 @@ const DetectionResults = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center">
-              <div className="text-2xl mr-3">🪐</div>
+              <img
+                src={logoBlack}
+                alt="Cosmik AI logo"
+                className="h-10 w-10 mr-3 object-contain"
+              />
               <div>
                 <h1 className="text-xl font-bold text-gray-900">Cosmik AI</h1>
                 <p className="text-sm text-gray-600">Automated Exoplanet Detection System</p>
