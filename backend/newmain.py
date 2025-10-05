@@ -62,7 +62,18 @@ def _coerce_config(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
         if not isinstance(entry, dict):
             continue
         target = str(entry.get("target", "unknown")).strip() or "unknown"
-        formatted[target] = {k: v for k, v in entry.items() if k != "target"}
+        detail = {k: v for k, v in entry.items() if k != "target"}
+        if "original_target" not in detail and payload.get("original_target"):
+            detail["original_target"] = payload.get("original_target")
+        if payload.get("timestamp") and "cached_timestamp" not in detail:
+            detail["cached_timestamp"] = payload.get("timestamp")
+        if payload.get("target_aliases"):
+            detail.setdefault("target_aliases", payload.get("target_aliases"))
+        if payload.get("checkpoint"):
+            detail.setdefault("checkpoint_path", payload.get("checkpoint"))
+        if payload.get("device"):
+            detail.setdefault("device", payload.get("device"))
+        formatted[target] = detail
     if not formatted:
         raise ValueError("No valid target entries were found in the results list.")
     return formatted

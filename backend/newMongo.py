@@ -3,6 +3,7 @@ import os
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 from datetime import datetime
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 # Mongo connection settings are configurable via environment variables.
@@ -19,14 +20,28 @@ def mongo_config() -> Tuple[str, str, str]:
     """Return the Mongo connection configuration being used."""
     return MONGO_URI, MONGO_DB, MONGO_COLLECTION
 
-def normalize_target(target: str) -> str:
-    """Normalize target names (case-insensitive and strip spaces)."""
+def _legacy_normalize(target: str) -> str:
     return target.strip().lower()
+
+
+def normalize_target(target: str) -> str:
+    """Normalize target names in a consistent, punctuation-free manner."""
+    legacy = _legacy_normalize(target)
+    cleaned = re.sub(r"[^a-z0-9]", "", legacy)
+    return cleaned or legacy
+
+
+def _candidate_keys(target: str) -> List[str]:
+    normalized = normalize_target(target)
+    legacy = _legacy_normalize(target)
+    if normalized == legacy:
+        return [normalized]
+    return [normalized, legacy]
 
 def get_cached_result(target: str) -> Optional[Dict[str, Any]]:
     """Return cached result if the target already exists."""
-    normalized = normalize_target(target)
-    return collection.find_one({"target": normalized}, {"_id": 0})
+    keys = _candidate_keys(target)
+    return collection.find_one({"target": {"$in": keys}}, {"_id": 0})
 
 def save_result(result_json: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -37,11 +52,13 @@ def save_result(result_json: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("Invalid JSON format: missing 'results' field")
 
     first_target = result_json["results"][0].get("target", "unknown")
-    normalized_target = normalize_target(first_target)
+    key_candidates = _candidate_keys(first_target)
+    normalized_target = key_candidates[0]
 
     record = {
         "target": normalized_target,
         "original_target": first_target,
+        "target_aliases": key_candidates,
         "checkpoint": result_json.get("checkpoint"),
         "device": result_json.get("device"),
         "elapsed_seconds": result_json.get("elapsed_seconds"),
@@ -49,7 +66,7 @@ def save_result(result_json: Dict[str, Any]) -> Dict[str, Any]:
         "timestamp": datetime.utcnow(),
     }
 
-    collection.replace_one({"target": normalized_target}, record, upsert=True)
+    collection.replace_one({"target": {"$in": key_candidates}}, record, upsert=True)
     return record
 
 

@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Stars, Html } from "@react-three/drei";
 import * as THREE from "three";
@@ -35,27 +35,88 @@ function demo(query: string) {
  * - return {notFound: true} if the star doesn’t exist
  * - else return { star: {...}, detections: [...] }
  */
-async function fetchAnalyze(target: string): Promise<{ notFound?: boolean; star?: StarMeta; detections: Detection[] }> {
+async function fetchAnalyze(target: string, apiBase: string): Promise<{ notFound?: boolean; star?: StarMeta; detections: Detection[] }> {
   try {
-    const r = await fetch(`/api/analyze?target=${encodeURIComponent(target)}`);
-    if (!r.ok) throw new Error(await r.text());
-    const j = await r.json();
-    if (j?.notFound) return { notFound: true, detections: [] };
-    const star: StarMeta = j.star ?? { name: j.id };
-    const detections: Detection[] = (j.detections || []).map((d: any, i: number) => ({
-      name: d.name || `${j.id}-p${i+1}`,
-      prob: d.prob ?? 0.8,
-      period_days: d.period_days ?? 3,
-      a_rs: d.a_rs ?? (3 + i*2),
-      rp_re: d.rp_re ?? (1.5 + i*0.7),
-      depth: d.features?.depth,
-      eq_temp_k: d.eq_temp_k,
-      folded: d.folded,
-      flags: d.flags,
-    }));
+    const res = await fetch(`${apiBase}/db/stars/${encodeURIComponent(target)}`);
+    if (res.status === 404) {
+      return { notFound: true, detections: [] };
+    }
+    if (!res.ok) {
+      throw new Error(await res.text());
+    }
+    const payload = await res.json();
+    const [displayTarget, detail] = Object.entries(payload)[0] ?? [target, {}];
+    if (!detail || typeof detail !== 'object') {
+      return { notFound: true, detections: [] };
+    }
+
+    const star: StarMeta = {
+      name: (detail as any).original_target || displayTarget,
+      teff: (detail as any).star_teff_k,
+      mass_sun: (detail as any).star_mass_msun,
+      radius_sun: (detail as any).star_radius_rsun,
+    };
+
+    const lightCurvePoints: any[] | undefined = Array.isArray((detail as any).light_curve_points)
+      ? (detail as any).light_curve_points as any[]
+      : undefined;
+
+    const folded = lightCurvePoints
+      ? {
+          phase: lightCurvePoints.map((point) => {
+            if (Array.isArray(point)) {
+              const phase = Number(point[0]);
+              return Number.isFinite(phase) ? phase - 0.5 : 0;
+            }
+            const phase = Number((point as any)?.phase);
+            return Number.isFinite(phase) ? phase : 0;
+          }),
+          flux: lightCurvePoints.map((point) => {
+            if (Array.isArray(point)) {
+              const flux = Number(point[1]);
+              return Number.isFinite(flux) ? flux : 1;
+            }
+            const flux = Number((point as any)?.flux);
+            return Number.isFinite(flux) ? flux : 1;
+          }),
+        }
+      : undefined;
+
+    const flags: [string, string][] = [];
+    if (typeof (detail as any).odd_even_match !== 'undefined') {
+      flags.push(["Odd/Even match", (detail as any).odd_even_match ? '✓' : '✗']);
+    }
+    if (typeof (detail as any).no_secondary !== 'undefined') {
+      flags.push(["No secondary", (detail as any).no_secondary ? '✓' : '✗']);
+    }
+    if (typeof (detail as any).secondary_depth_fraction === 'number') {
+      const val = (detail as any).secondary_depth_fraction as number;
+      flags.push(["Secondary depth", `${(val * 100).toFixed(2)}%`]);
+    }
+
+    const rawProb = Number((detail as any).confidence ?? (detail as any).confidence_adjusted ?? 0);
+    const prob = Number.isFinite(rawProb) ? rawProb : 0;
+    const period = Number((detail as any).period_days ?? 0);
+    const aOverR = Number((detail as any).a_over_r_star ?? 0);
+    const sizeEarth = Number((detail as any).size_vs_earth ?? 0);
+
+    const detections: Detection[] = [
+      {
+        name: (detail as any).candidate_name || `${(star.name || displayTarget)}-candidate`,
+        prob,
+        period_days: Number.isFinite(period) ? period : 0,
+        a_rs: Number.isFinite(aOverR) ? aOverR : 0,
+        rp_re: Number.isFinite(sizeEarth) ? sizeEarth : 0,
+        depth: (detail as any).transit_depth_fraction,
+        eq_temp_k: (detail as any).equilibrium_temperature_k,
+        folded,
+        flags: flags.length ? flags : undefined,
+      },
+    ];
+
     return { star, detections };
-  } catch {
-    // remove this demo() when your backend is ready
+  } catch (error) {
+    console.error('visual_frontend: falling back to demo data', error);
     return demo(target);
   }
 }
@@ -310,13 +371,15 @@ export default function App() {
   const [detections, setDetections] = useState<Detection[]>([]);
   const [selected, setSelected] = useState<number | null>(0);
   const [showStarPanel, setShowStarPanel] = useState(false);
+  const API_BASE_URL = useMemo(() => import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000", []);
 
-  async function onSearch() {
-    if (!query.trim()) return;
-    // Move to "searching" and show star+radar only if the target resolves.
+  const performSearch = async (rawTarget: string) => {
+    const trimmed = rawTarget.trim();
+    if (!trimmed) return;
+    setQuery(trimmed);
     setState("searching");
-const started = performance.now();
-const res = await fetchAnalyze(query.trim());
+    const started = performance.now();
+    const res = await fetchAnalyze(trimmed, API_BASE_URL);
 
     if (res.notFound) {
       // back to landing (centered search), no star shown
@@ -328,18 +391,27 @@ const res = await fetchAnalyze(query.trim());
     }
 
     const minMs = 600;
-const elapsed = performance.now() - started;
-const goResults = () => setState("results");
-elapsed < minMs ? setTimeout(goResults, minMs - elapsed) : goResults();
+    const elapsed = performance.now() - started;
+    const goResults = () => setState("results");
+    elapsed < minMs ? setTimeout(goResults, minMs - elapsed) : goResults();
 
-    setStar(res.star ?? { name: query.trim() });
+    setStar(res.star ?? { name: trimmed });
     setDetections(res.detections);
     setSelected(res.detections.length ? 0 : null);
     setShowStarPanel(false);
+  };
 
-    // If detections exist, go to results; otherwise still show results view with none.
-    setState("results");
+  async function onSearch() {
+    await performSearch(query);
   }
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const initialTarget = params.get("target");
+    if (initialTarget) {
+      performSearch(initialTarget);
+    }
+  }, [API_BASE_URL]);
 
   /* Sticky top bar appears only after a valid search */
   const TopBar = state === "landing" ? null : (

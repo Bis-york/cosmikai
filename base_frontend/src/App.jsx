@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Upload, FileText, BarChart3, Settings, Zap, TrendingUp, AlertCircle, CheckCircle, XCircle, Eye, Download } from 'lucide-react';
 import OrbitVisualizer from './OrbitVisualiser';
 
@@ -248,9 +248,14 @@ const ExoplanetDetectionApp = () => {
     planetsFound: 342,
     falsePositives: 23
   });
+  const [historyEntries, setHistoryEntries] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState(null);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
   // Mock detection function - replace with actual API call
   const API_BASE_URL = useMemo(() => import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000', []);
+  const VISUAL_BASE_URL = useMemo(() => import.meta.env.VITE_VISUAL_BASE_URL ?? 'http://localhost:4173', []);
 
 const runDetection = async () => {
   setErrorMessage(null);
@@ -340,6 +345,7 @@ const runDetection = async () => {
         planetsFound: prev.planetsFound + (detection.hasCandidate ? 1 : 0),
       }));
       setProgressStep(null);
+      setHistoryRefreshKey((key) => key + 1);
     } catch (error) {
       console.error('Prediction request failed:', error);
       setDetectionResults({ error: error.message || 'Unknown error occurred' });
@@ -355,7 +361,7 @@ const runDetection = async () => {
   const [mission, setMission] = useState('Kepler');
   const [customMission, setCustomMission] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [nBins, setNBins] = useState(2001);
+  const [nBins, setNBins] = useState(512);
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.5);
   const [show3DView, setShow3DView] = useState(false);
 
@@ -369,6 +375,73 @@ const runDetection = async () => {
       setUploadedFile(null);
     }
   };
+
+  useEffect(() => {
+    if (activeTab !== 'statistics') return;
+    let cancelled = false;
+
+    const fetchHistory = async () => {
+      setHistoryLoading(true);
+      setHistoryError(null);
+      try {
+        const res = await fetch(`${API_BASE_URL}/db/stars`);
+        if (!res.ok) {
+          throw new Error(await res.text());
+        }
+        const data = await res.json();
+        const targets = Array.isArray(data.targets) ? data.targets : [];
+        if (!targets.length) {
+          if (!cancelled) setHistoryEntries([]);
+          return;
+        }
+
+        const detailResults = await Promise.all(
+          targets.map(async (target) => {
+            try {
+              const detailRes = await fetch(`${API_BASE_URL}/db/stars/${encodeURIComponent(target)}`);
+              if (!detailRes.ok) {
+                throw new Error(await detailRes.text());
+              }
+              const detailJson = await detailRes.json();
+              const [displayTarget, detail] = Object.entries(detailJson)[0] ?? [target, {}];
+              return {
+                key: target,
+                displayTarget,
+                detail,
+              };
+            } catch (err) {
+              console.error(`Failed to fetch history detail for ${target}:`, err);
+              return null;
+            }
+          })
+        );
+
+        const cleaned = detailResults
+          .filter(Boolean)
+          .sort((a, b) => {
+            const ta = a.detail.cached_timestamp ? new Date(a.detail.cached_timestamp).getTime() : 0;
+            const tb = b.detail.cached_timestamp ? new Date(b.detail.cached_timestamp).getTime() : 0;
+            return tb - ta;
+          });
+
+        if (!cancelled) {
+          setHistoryEntries(cleaned);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setHistoryError(err.message || 'Failed to load detection history');
+        }
+      } finally {
+        if (!cancelled) setHistoryLoading(false);
+      }
+    };
+
+    fetchHistory();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, API_BASE_URL, historyRefreshKey]);
 
   // const FileUploadArea = () => (
     
@@ -540,6 +613,20 @@ const DetectionResults = () => {
     );
   };
 
+  const openVisualExplorer = (entry) => {
+    const targetName = entry?.detail?.original_target || entry?.displayTarget || entry?.key;
+    if (!targetName) return;
+    const url = `${VISUAL_BASE_URL}?target=${encodeURIComponent(targetName)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const formatTimestamp = (value) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleString();
+  };
+
   const ModelStatistics = () => (
     <div className="space-y-6">
       <div className="bg-white rounded-lg shadow-md p-6">
@@ -577,28 +664,49 @@ const DetectionResults = () => {
 
       <div className="bg-white rounded-lg shadow-md p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Detection History</h3>
-        <div className="space-y-3">
-          {[
-            { file: 'kepler_001.csv', result: 'Planet Detected', confidence: 0.92, time: '2 min ago' },
-            { file: 'tess_047.fits', result: 'No Planet', confidence: 0.34, time: '15 min ago' },
-            { file: 'k2_data.csv', result: 'Planet Detected', confidence: 0.78, time: '1 hour ago' },
-            { file: 'lightcurve_x.csv', result: 'No Planet', confidence: 0.12, time: '2 hours ago' },
-          ].map((item, index) => (
-            <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-              <div className="flex items-center">
-                <FileText className="h-4 w-4 text-gray-400 mr-2" />
-                <span className="font-medium">{item.file}</span>
-              </div>
-              <div className="flex items-center space-x-4 text-sm">
-                <span className={item.result === 'Planet Detected' ? 'text-green-600' : 'text-gray-600'}>
-                  {item.result}
-                </span>
-                <span className="text-gray-500">{(item.confidence * 100).toFixed(0)}%</span>
-                <span className="text-gray-400">{item.time}</span>
-              </div>
-            </div>
-          ))}
-        </div>
+        {historyLoading && (
+          <div className="py-6 text-sm text-gray-500">Loading cached detections…</div>
+        )}
+        {historyError && !historyLoading && (
+          <div className="py-4 text-sm text-red-600">{historyError}</div>
+        )}
+        {!historyLoading && !historyError && (
+          <div className="space-y-3">
+            {historyEntries.length === 0 && (
+              <div className="text-sm text-gray-500">No cached detections yet. Run a query to populate history.</div>
+            )}
+            {historyEntries.map((entry) => {
+              const detail = entry.detail || {};
+              const targetName = detail.original_target || entry.displayTarget || entry.key;
+              const missionName = detail.mission || '—';
+              const confidence = typeof detail.confidence === 'number' ? `${(detail.confidence * 100).toFixed(1)}%` : '—';
+              const status = detail.has_candidate ? 'Candidate' : 'No Candidate';
+              const statusColor = detail.has_candidate ? 'text-green-600' : 'text-gray-600';
+              const updated = formatTimestamp(detail.cached_timestamp);
+
+              return (
+                <button
+                  key={entry.key}
+                  onClick={() => openVisualExplorer(entry)}
+                  className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-blue-50 transition rounded-lg text-left"
+                >
+                  <div className="flex items-center">
+                    <FileText className="h-4 w-4 text-gray-400 mr-2" />
+                    <div>
+                      <div className="font-medium text-gray-900">{targetName}</div>
+                      <div className="text-xs text-gray-500">Mission: {missionName}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-4 text-sm">
+                    <span className={statusColor}>{status}</span>
+                    <span className="text-gray-500">{confidence}</span>
+                    <span className="text-gray-400">{updated}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
