@@ -3,8 +3,9 @@ pandas
 torch
 scikit-learn
 astropy
-lightkurve
+lightkurve[oktopus]
 batman-package
 fastapi
 pydantic
 uvicorn
+pytest
