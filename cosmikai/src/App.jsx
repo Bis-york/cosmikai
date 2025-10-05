@@ -43,44 +43,136 @@ const ExoplanetDetectionApp = () => {
     }));
   };
 
+  const [inputMode, setInputMode] = useState('upload'); // 'upload' or 'query'
+  const [starName, setStarName] = useState('');
+  const [mission, setMission] = useState('Kepler');
+
   const FileUploadArea = () => (
     <div className="bg-white rounded-lg shadow-md p-6">
-      <div className="border-2 border-dashed border-blue-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors">
-        <Upload className="mx-auto h-12 w-12 text-blue-400 mb-4" />
-        <div className="space-y-2">
-          <h3 className="text-lg font-medium text-gray-900">Upload Light Curve Data</h3>
-          <p className="text-gray-500">Drag and drop your CSV or FITS files, or click to browse</p>
-          <p className="text-sm text-gray-400">Supported formats: CSV, FITS, TSV</p>
-        </div>
-        <input
-          type="file"
-          className="mt-4 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-          accept=".csv,.fits,.tsv"
-          onChange={(e) => {
-            setUploadedFile(e.target.files[0]);
+      {/* Toggle between Upload and Query modes */}
+      <div className="flex gap-4 mb-6">
+        <button
+          onClick={() => {
+            setInputMode('upload');
             setDetectionResults(null);
+            setStarName('');
           }}
-        />
+          className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors ${
+            inputMode === 'upload'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          <Upload className="inline-block h-4 w-4 mr-2" />
+          Upload Data
+        </button>
+        <button
+          onClick={() => {
+            setInputMode('query');
+            setDetectionResults(null);
+            setUploadedFile(null);
+          }}
+          className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors ${
+            inputMode === 'query'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          <BarChart3 className="inline-block h-4 w-4 mr-2" />
+          Query by Star
+        </button>
       </div>
-      
-      {uploadedFile && (
-        <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-          <div className="flex items-center">
-            <FileText className="h-5 w-5 text-green-600 mr-2" />
-            <span className="text-green-800 font-medium">{uploadedFile.name}</span>
-            <span className="ml-auto text-green-600 text-sm">
-              {(uploadedFile.size / 1024).toFixed(1)} KB
-            </span>
+
+      {/* Upload Mode */}
+      {inputMode === 'upload' && (
+        <div className="border-2 border-dashed border-blue-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors">
+          <Upload className="mx-auto h-12 w-12 text-blue-400 mb-4" />
+          <div className="space-y-2">
+            <h3 className="text-lg font-medium text-gray-900">Upload Light Curve Data</h3>
+            <p className="text-gray-500">Drag and drop your CSV or FITS files, or click to browse</p>
+            <p className="text-sm text-gray-400">Supported formats: CSV, FITS, TSV</p>
           </div>
+          <input
+            type="file"
+            className="mt-4 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+            accept=".csv,.fits,.tsv"
+            onChange={(e) => {
+              setUploadedFile(e.target.files[0]);
+              setDetectionResults(null);
+            }}
+          />
+        </div>
+      )}
+
+      {/* Query Mode */}
+      {inputMode === 'query' && (
+        <div className="border-2 border-blue-300 rounded-lg p-8">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Star Name or ID
+              </label>
+              <input
+                type="text"
+                placeholder="e.g., Kepler-10, KIC 11446443, TIC 307210830"
+                value={starName}
+                onChange={(e) => setStarName(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="mt-1 text-sm text-gray-500">
+                Enter the star's name, KIC ID, TIC ID, or EPIC number
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Mission/Survey
+              </label>
+              <select
+                value={mission}
+                onChange={(e) => setMission(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="Kepler">Kepler</option>
+                <option value="K2">K2</option>
+                <option value="TESS">TESS</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Action Button - shown for both modes when ready */}
+      {((inputMode === 'upload' && uploadedFile) || (inputMode === 'query' && starName.trim())) && (
+        <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+          {inputMode === 'upload' && uploadedFile && (
+            <div className="flex items-center mb-4">
+              <FileText className="h-5 w-5 text-green-600 mr-2" />
+              <span className="text-green-800 font-medium">{uploadedFile.name}</span>
+              <span className="ml-auto text-green-600 text-sm">
+                {(uploadedFile.size / 1024).toFixed(1)} KB
+              </span>
+            </div>
+          )}
+          
+          {inputMode === 'query' && starName.trim() && (
+            <div className="flex items-center mb-4">
+              <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
+              <span className="text-green-800 font-medium">
+                {starName} ({mission})
+              </span>
+            </div>
+          )}
+
           <button
             onClick={runDetection}
             disabled={isProcessing}
-            className="mt-4 w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
           >
             {isProcessing ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Analyzing Light Curve...
+                {inputMode === 'query' ? 'Fetching data from NASA archives...' : 'Analyzing Light Curve...'}
               </>
             ) : (
               <>
@@ -312,7 +404,7 @@ const ExoplanetDetectionApp = () => {
             <div className="flex items-center">
               <div className="text-2xl mr-3">🪐</div>
               <div>
-                <h1 className="text-xl font-bold text-gray-900">Cosmik AI</h1>
+                <h1 className="text-xl font-bold text-gray-900">ExoPlanet AI</h1>
                 <p className="text-sm text-gray-600">Automated Exoplanet Detection System</p>
               </div>
             </div>
