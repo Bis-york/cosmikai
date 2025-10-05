@@ -5,6 +5,7 @@ import pandas as pd
 from pathlib import Path
 import tempfile
 import os
+import torch
 from unittest.mock import patch, MagicMock
 
 # Import the combined analyzer (assuming it's in the same directory)
