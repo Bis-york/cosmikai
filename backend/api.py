@@ -9,7 +9,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field, root_validator
 
-from backend.base import (
+from backend.csv import (
     DEFAULT_CHECKPOINT,
     DEFAULT_CONFIDENCE_THRESHOLD,
     process_json_input,
