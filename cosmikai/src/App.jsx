@@ -1,66 +1,33 @@
 import React, { useState } from 'react';
 import { Upload, FileText, BarChart3, Settings, Zap, TrendingUp, AlertCircle, CheckCircle, XCircle, Eye, Download } from 'lucide-react';
+import OrbitVisualizer from './OrbitVisualiser';
 
-const ExoplanetDetectionApp = () => {
-  const [activeTab, setActiveTab] = useState('upload');
-  const [uploadedFile, setUploadedFile] = useState(null);
-  const [detectionResults, setDetectionResults] = useState(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [modelStats, setModelStats] = useState({
-    accuracy: 0.87,
-    totalPredictions: 1247,
-    planetsFound: 342,
-    falsePositives: 23
-  });
-
-  // Mock detection function - replace with actual API call
-  const runDetection = async () => {
-    setIsProcessing(true);
-    
-    // Simulate API processing time
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Mock results - replace with actual API response
-    const mockResults = {
-      planet_detected: Math.random() > 0.4,
-      confidence: Math.random() * 0.4 + 0.6, // 0.6-1.0
-      period_days: Math.random() * 10 + 1,
-      transit_depth_ppm: Math.random() * 5000 + 1000,
-      planet_radius_earth: Math.random() * 3 + 0.5,
-      processing_time_seconds: 1.8,
-      lightcurve_data: Array.from({length: 100}, (_, i) => ({
-        time: i * 0.1,
-        flux: 1.0 + (Math.random() - 0.5) * 0.01 - (i > 30 && i < 40 ? 0.02 : 0)
-      }))
-    };
-    
-    setDetectionResults(mockResults);
-    setIsProcessing(false);
-    setModelStats(prev => ({
-      ...prev,
-      totalPredictions: prev.totalPredictions + 1,
-      planetsFound: prev.planetsFound + (mockResults.planet_detected ? 1 : 0)
-    }));
-  };
-
-  const [inputMode, setInputMode] = useState('upload'); // 'upload' or 'query'
-  const [starName, setStarName] = useState('');
-  const [mission, setMission] = useState('Kepler');
-  const [customMission, setCustomMission] = useState('');
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [nBins, setNBins] = useState(2001);
-  const [confidenceThreshold, setConfidenceThreshold] = useState(0.5);
-
-  const FileUploadArea = () => (
-    <div className="bg-white rounded-lg shadow-md p-6">
+const FileUploadArea = ({ 
+  inputMode, 
+  handleModeSwitch, 
+  uploadedFile, 
+  setUploadedFile, 
+  setDetectionResults,
+  starName,
+  setStarName,
+  mission,
+  setMission,
+  customMission,
+  setCustomMission,
+  showAdvanced,
+  setShowAdvanced,
+  nBins,
+  setNBins,
+  confidenceThreshold,
+  setConfidenceThreshold,
+  runDetection,
+  isProcessing
+}) => (
+  <div className="bg-white rounded-lg shadow-md p-6">
       {/* Toggle between Upload and Query modes */}
       <div className="flex gap-4 mb-6">
         <button
-          onClick={() => {
-            setInputMode('upload');
-            setDetectionResults(null);
-            setStarName('');
-          }}
+          onClick={() => handleModeSwitch('upload')}
           className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors ${
             inputMode === 'upload'
               ? 'bg-blue-600 text-white'
@@ -71,11 +38,7 @@ const ExoplanetDetectionApp = () => {
           Upload Data
         </button>
         <button
-          onClick={() => {
-            setInputMode('query');
-            setDetectionResults(null);
-            setUploadedFile(null);
-          }}
+          onClick={() => handleModeSwitch('query')}
           className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors ${
             inputMode === 'query'
               ? 'bg-blue-600 text-white'
@@ -261,7 +224,73 @@ const ExoplanetDetectionApp = () => {
         </div>
       )}
     </div>
-  );
+
+);
+
+const ExoplanetDetectionApp = () => {
+  const [activeTab, setActiveTab] = useState('upload');
+  const [uploadedFile, setUploadedFile] = useState(null);
+  const [detectionResults, setDetectionResults] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [modelStats, setModelStats] = useState({
+    accuracy: 0.87,
+    totalPredictions: 1247,
+    planetsFound: 342,
+    falsePositives: 23
+  });
+
+  // Mock detection function - replace with actual API call
+  const runDetection = async () => {
+    setIsProcessing(true);
+    
+    // Simulate API processing time
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    // Mock results - replace with actual API response
+    const mockResults = {
+      planet_detected: Math.random() > 0.4,
+      confidence: Math.random() * 0.4 + 0.6, // 0.6-1.0
+      period_days: Math.random() * 10 + 1,
+      transit_depth_ppm: Math.random() * 5000 + 1000,
+      planet_radius_earth: Math.random() * 3 + 0.5,
+      processing_time_seconds: 1.8,
+      lightcurve_data: Array.from({length: 100}, (_, i) => ({
+        time: i * 0.1,
+        flux: 1.0 + (Math.random() - 0.5) * 0.01 - (i > 30 && i < 40 ? 0.02 : 0)
+      }))
+    };
+    
+    setDetectionResults(mockResults);
+    setIsProcessing(false);
+    setModelStats(prev => ({
+      ...prev,
+      totalPredictions: prev.totalPredictions + 1,
+      planetsFound: prev.planetsFound + (mockResults.planet_detected ? 1 : 0)
+    }));
+  };
+
+  const [inputMode, setInputMode] = useState('upload'); // 'upload' or 'query'
+  const [starName, setStarName] = useState('');
+  const [mission, setMission] = useState('Kepler');
+  const [customMission, setCustomMission] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [nBins, setNBins] = useState(2001);
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0.5);
+  const [show3DView, setShow3DView] = useState(false);
+
+  const handleModeSwitch = (mode) => {
+    setInputMode(mode);
+    setDetectionResults(null);
+    if (mode === 'upload') {
+      setStarName('');
+    } else {
+      setUploadedFile(null);
+    }
+  };
+
+  // const FileUploadArea = () => (
+    
+  // );
 
   const DetectionResults = () => {
     if (!detectionResults) return null;
@@ -338,10 +367,19 @@ const ExoplanetDetectionApp = () => {
           </div>
           <div className="mt-4 flex justify-between items-center text-sm text-gray-600">
             <span>Data points: {detectionResults.lightcurve_data?.length || 0}</span>
-            <button className="flex items-center text-blue-600 hover:text-blue-800">
-              <Download className="h-4 w-4 mr-1" />
-              Export Data
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShow3DView(true)}
+                className="flex items-center text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition-colors"
+              >
+                <Eye className="h-4 w-4 mr-1" />
+                View in 3D
+              </button>
+              <button className="flex items-center text-blue-600 hover:text-blue-800">
+                <Download className="h-4 w-4 mr-1" />
+                Export Data
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -525,7 +563,27 @@ const ExoplanetDetectionApp = () => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {activeTab === 'upload' && (
           <div className="space-y-8">
-            <FileUploadArea />
+            <FileUploadArea 
+  inputMode={inputMode}
+  handleModeSwitch={handleModeSwitch}
+  uploadedFile={uploadedFile}
+  setUploadedFile={setUploadedFile}
+  setDetectionResults={setDetectionResults}
+  starName={starName}
+  setStarName={setStarName}
+  mission={mission}
+  setMission={setMission}
+  customMission={customMission}
+  setCustomMission={setCustomMission}
+  showAdvanced={showAdvanced}
+  setShowAdvanced={setShowAdvanced}
+  nBins={nBins}
+  setNBins={setNBins}
+  confidenceThreshold={confidenceThreshold}
+  setConfidenceThreshold={setConfidenceThreshold}
+  runDetection={runDetection}
+  isProcessing={isProcessing}
+/>
             <DetectionResults />
           </div>
         )}
@@ -546,6 +604,28 @@ const ExoplanetDetectionApp = () => {
           </div>
         </div>
       </footer>
+
+      {/* 3D Visualization Overlay */}
+{show3DView && detectionResults?.planet_detected && (
+  <OrbitVisualizer
+    starName={starName || "Unknown Star"}
+    detections={[
+      {
+        name: `${starName || "Star"}-b`,
+        confidence: detectionResults.confidence,
+        period_days: detectionResults.period_days,
+        planet_radius_earth: detectionResults.planet_radius_earth,
+        transit_depth_ppm: detectionResults.transit_depth_ppm,
+        eq_temp_k: detectionResults.eq_temp_k || 1000,
+        folded_lightcurve: detectionResults.lightcurve_data ? {
+          phase: detectionResults.lightcurve_data.map((d, i) => (i / detectionResults.lightcurve_data.length) - 0.5),
+          flux: detectionResults.lightcurve_data.map(d => d.flux)
+        } : undefined
+      }
+    ]}
+    onClose={() => setShow3DView(false)}
+  />
+)}
     </div>
   );
 };
