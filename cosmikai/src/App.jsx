@@ -404,7 +404,7 @@ const ExoplanetDetectionApp = () => {
             <div className="flex items-center">
               <div className="text-2xl mr-3">🪐</div>
               <div>
-                <h1 className="text-xl font-bold text-gray-900">ExoPlanet AI</h1>
+                <h1 className="text-xl font-bold text-gray-900">Cosmik AI</h1>
                 <p className="text-sm text-gray-600">Automated Exoplanet Detection System</p>
               </div>
             </div>
