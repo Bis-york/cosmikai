@@ -371,7 +371,10 @@ export default function App() {
   const [detections, setDetections] = useState<Detection[]>([]);
   const [selected, setSelected] = useState<number | null>(0);
   const [showStarPanel, setShowStarPanel] = useState(false);
-  const API_BASE_URL = useMemo(() => import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000", []);
+  const API_BASE_URL = useMemo(
+    () => import.meta.env.VITE_API_BASE_URL ?? "https://api.flyingwaffle.ca",
+    [],
+  );
 
   const performSearch = async (rawTarget: string) => {
     const trimmed = rawTarget.trim();

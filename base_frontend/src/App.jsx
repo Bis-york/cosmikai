@@ -254,8 +254,14 @@ const ExoplanetDetectionApp = () => {
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
   // Mock detection function - replace with actual API call
-  const API_BASE_URL = useMemo(() => import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000', []);
-  const VISUAL_BASE_URL = useMemo(() => import.meta.env.VITE_VISUAL_BASE_URL ?? 'http://localhost:4173', []);
+  const API_BASE_URL = useMemo(
+    () => import.meta.env.VITE_API_BASE_URL ?? 'https://api.flyingwaffle.ca',
+    [],
+  );
+  const VISUAL_BASE_URL = useMemo(
+    () => import.meta.env.VITE_VISUAL_BASE_URL ?? 'https://visuals.flyingwaffle.ca',
+    [],
+  );
 
 const runDetection = async () => {
   setErrorMessage(null);

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
 
+import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, validator
@@ -15,16 +16,29 @@ from backend.newMongo import (
 )
 from backend.predict import process_json_input as run_lightcurve
 
+def _resolve_allowed_origins() -> list[str] | None:
+    env_value = os.getenv("COSMIKAI_CORS_ORIGINS")
+    if not env_value:
+        return [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:4173",
+            "http://127.0.0.1:4173",
+            "http://localhost:5180",
+            "http://127.0.0.1:5180",
+            "http://localhost:5280",
+            "http://127.0.0.1:5280",
+        ]
+    origins = [origin.strip() for origin in env_value.split(",") if origin.strip()]
+    return origins or None
+
+
 app = FastAPI(title="CosmiKai Prediction Gateway")
 
+allowed_origins = _resolve_allowed_origins() or ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:4173",
-        "http://127.0.0.1:4173",
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
