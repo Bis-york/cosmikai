@@ -1,0 +1,4 @@
+kepoi_name,koi_period,koi_time0bk,koi_duration,koi_depth,koi_dor,koi_impact,koi_eccen,koi_longp,koi_limbdark_mod,koi_ldm_coeff1,koi_ldm_coeff2
+K00001.01,3.213,131.512,2.15,0.000152,8.45,0.146,0.0,90.0,quadratic,0.44,0.26
+K00002.01,9.488,138.958,4.82,0.000891,15.23,0.234,0.05,85.4,quadratic,0.42,0.28
+K00003.01,54.319,145.234,8.91,0.000234,35.67,0.891,0.12,92.1,linear,0.35,
