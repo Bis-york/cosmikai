@@ -1,5 +1,231 @@
 import React, { useState } from 'react';
 import { Upload, FileText, BarChart3, Settings, Zap, TrendingUp, AlertCircle, CheckCircle, XCircle, Eye, Download } from 'lucide-react';
+import OrbitVisualizer from './OrbitVisualiser';
+
+const FileUploadArea = ({ 
+  inputMode, 
+  handleModeSwitch, 
+  uploadedFile, 
+  setUploadedFile, 
+  setDetectionResults,
+  starName,
+  setStarName,
+  mission,
+  setMission,
+  customMission,
+  setCustomMission,
+  showAdvanced,
+  setShowAdvanced,
+  nBins,
+  setNBins,
+  confidenceThreshold,
+  setConfidenceThreshold,
+  runDetection,
+  isProcessing
+}) => (
+  <div className="bg-white rounded-lg shadow-md p-6">
+      {/* Toggle between Upload and Query modes */}
+      <div className="flex gap-4 mb-6">
+        <button
+          onClick={() => handleModeSwitch('upload')}
+          className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors ${
+            inputMode === 'upload'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          <Upload className="inline-block h-4 w-4 mr-2" />
+          Upload Data
+        </button>
+        <button
+          onClick={() => handleModeSwitch('query')}
+          className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors ${
+            inputMode === 'query'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          <BarChart3 className="inline-block h-4 w-4 mr-2" />
+          Query by Star
+        </button>
+      </div>
+
+      {/* Upload Mode */}
+      {inputMode === 'upload' && (
+        <div className="border-2 border-dashed border-blue-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors">
+          <Upload className="mx-auto h-12 w-12 text-blue-400 mb-4" />
+          <div className="space-y-2">
+            <h3 className="text-lg font-medium text-gray-900">Upload Light Curve Data</h3>
+            <p className="text-gray-500">Drag and drop your CSV or FITS files, or click to browse</p>
+            <p className="text-sm text-gray-400">Supported formats: CSV, FITS, TSV</p>
+          </div>
+          <input
+            type="file"
+            className="mt-4 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+            accept=".csv,.fits,.tsv"
+            onChange={(e) => {
+              setUploadedFile(e.target.files[0]);
+              setDetectionResults(null);
+            }}
+          />
+        </div>
+      )}
+
+      {/* Query Mode */}
+      {inputMode === 'query' && (
+        <div className="border-2 border-blue-300 rounded-lg p-8">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Star Name or ID
+              </label>
+              <input
+                type="text"
+                placeholder="e.g., Kepler-10, KIC 11446443, TIC 307210830"
+                value={starName}
+                onChange={(e) => setStarName(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="mt-1 text-sm text-gray-500">
+                Enter the star's name, KIC ID, TIC ID, or EPIC number
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Mission/Survey
+              </label>
+              <select
+                value={mission}
+                onChange={(e) => {
+                  setMission(e.target.value);
+                  if (e.target.value !== 'Other') {
+                    setCustomMission('');
+                  }
+                }}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="Kepler">Kepler</option>
+                <option value="K2">K2</option>
+                <option value="TESS">TESS</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+
+            {mission === 'Other' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Custom Mission Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., CoRoT, JWST, etc."
+                  value={customMission}
+                  onChange={(e) => setCustomMission(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            )}
+
+            {/* Advanced Options Toggle */}
+            <div className="pt-4 border-t border-gray-200">
+              <button
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className="flex items-center text-sm text-blue-600 hover:text-blue-800"
+              >
+                <Settings className="h-4 w-4 mr-1" />
+                {showAdvanced ? 'Hide' : 'Show'} Advanced Options
+              </button>
+            </div>
+
+            {/* Advanced Options Panel */}
+            {showAdvanced && (
+              <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Number of Bins (nBins)
+                  </label>
+                  <input
+                    type="number"
+                    value={nBins}
+                    onChange={(e) => setNBins(parseInt(e.target.value) || 2001)}
+                    min="100"
+                    max="10000"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Number of bins for the BLS periodogram (default: 2001)
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Confidence Threshold: {(confidenceThreshold * 100).toFixed(0)}%
+                  </label>
+                  <input
+                    type="range"
+                    min="0.1"
+                    max="0.9"
+                    step="0.05"
+                    value={confidenceThreshold}
+                    onChange={(e) => setConfidenceThreshold(parseFloat(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>10% (More Results)</span>
+                    <span>90% (Higher Precision)</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Action Button - shown for both modes when ready */}
+      {((inputMode === 'upload' && uploadedFile) || (inputMode === 'query' && starName.trim())) && (
+        <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+          {inputMode === 'upload' && uploadedFile && (
+            <div className="flex items-center mb-4">
+              <FileText className="h-5 w-5 text-green-600 mr-2" />
+              <span className="text-green-800 font-medium">{uploadedFile.name}</span>
+              <span className="ml-auto text-green-600 text-sm">
+                {(uploadedFile.size / 1024).toFixed(1)} KB
+              </span>
+            </div>
+          )}
+          
+          {inputMode === 'query' && starName.trim() && (
+            <div className="flex items-center mb-4">
+              <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
+              <span className="text-green-800 font-medium">
+                {starName} ({mission})
+              </span>
+            </div>
+          )}
+
+          <button
+            onClick={runDetection}
+            disabled={isProcessing}
+            className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+          >
+            {isProcessing ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                {inputMode === 'query' ? 'Fetching data from NASA archives...' : 'Analyzing Light Curve...'}
+              </>
+            ) : (
+              <>
+                <Zap className="h-4 w-4 mr-2" />
+                Detect Exoplanets
+              </>
+            )}
+          </button>
+        </div>
+      )}
+    </div>
+
+);
 
 const ExoplanetDetectionApp = () => {
   const [activeTab, setActiveTab] = useState('upload');
@@ -43,56 +269,28 @@ const ExoplanetDetectionApp = () => {
     }));
   };
 
-  const FileUploadArea = () => (
-    <div className="bg-white rounded-lg shadow-md p-6">
-      <div className="border-2 border-dashed border-blue-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors">
-        <Upload className="mx-auto h-12 w-12 text-blue-400 mb-4" />
-        <div className="space-y-2">
-          <h3 className="text-lg font-medium text-gray-900">Upload Light Curve Data</h3>
-          <p className="text-gray-500">Drag and drop your CSV or FITS files, or click to browse</p>
-          <p className="text-sm text-gray-400">Supported formats: CSV, FITS, TSV</p>
-        </div>
-        <input
-          type="file"
-          className="mt-4 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-          accept=".csv,.fits,.tsv"
-          onChange={(e) => {
-            setUploadedFile(e.target.files[0]);
-            setDetectionResults(null);
-          }}
-        />
-      </div>
-      
-      {uploadedFile && (
-        <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-          <div className="flex items-center">
-            <FileText className="h-5 w-5 text-green-600 mr-2" />
-            <span className="text-green-800 font-medium">{uploadedFile.name}</span>
-            <span className="ml-auto text-green-600 text-sm">
-              {(uploadedFile.size / 1024).toFixed(1)} KB
-            </span>
-          </div>
-          <button
-            onClick={runDetection}
-            disabled={isProcessing}
-            className="mt-4 w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-          >
-            {isProcessing ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Analyzing Light Curve...
-              </>
-            ) : (
-              <>
-                <Zap className="h-4 w-4 mr-2" />
-                Detect Exoplanets
-              </>
-            )}
-          </button>
-        </div>
-      )}
-    </div>
-  );
+  const [inputMode, setInputMode] = useState('upload'); // 'upload' or 'query'
+  const [starName, setStarName] = useState('');
+  const [mission, setMission] = useState('Kepler');
+  const [customMission, setCustomMission] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [nBins, setNBins] = useState(2001);
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0.5);
+  const [show3DView, setShow3DView] = useState(false);
+
+  const handleModeSwitch = (mode) => {
+    setInputMode(mode);
+    setDetectionResults(null);
+    if (mode === 'upload') {
+      setStarName('');
+    } else {
+      setUploadedFile(null);
+    }
+  };
+
+  // const FileUploadArea = () => (
+    
+  // );
 
   const DetectionResults = () => {
     if (!detectionResults) return null;
@@ -169,10 +367,19 @@ const ExoplanetDetectionApp = () => {
           </div>
           <div className="mt-4 flex justify-between items-center text-sm text-gray-600">
             <span>Data points: {detectionResults.lightcurve_data?.length || 0}</span>
-            <button className="flex items-center text-blue-600 hover:text-blue-800">
-              <Download className="h-4 w-4 mr-1" />
-              Export Data
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShow3DView(true)}
+                className="flex items-center text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition-colors"
+              >
+                <Eye className="h-4 w-4 mr-1" />
+                View in 3D
+              </button>
+              <button className="flex items-center text-blue-600 hover:text-blue-800">
+                <Download className="h-4 w-4 mr-1" />
+                Export Data
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -356,7 +563,27 @@ const ExoplanetDetectionApp = () => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {activeTab === 'upload' && (
           <div className="space-y-8">
-            <FileUploadArea />
+            <FileUploadArea 
+  inputMode={inputMode}
+  handleModeSwitch={handleModeSwitch}
+  uploadedFile={uploadedFile}
+  setUploadedFile={setUploadedFile}
+  setDetectionResults={setDetectionResults}
+  starName={starName}
+  setStarName={setStarName}
+  mission={mission}
+  setMission={setMission}
+  customMission={customMission}
+  setCustomMission={setCustomMission}
+  showAdvanced={showAdvanced}
+  setShowAdvanced={setShowAdvanced}
+  nBins={nBins}
+  setNBins={setNBins}
+  confidenceThreshold={confidenceThreshold}
+  setConfidenceThreshold={setConfidenceThreshold}
+  runDetection={runDetection}
+  isProcessing={isProcessing}
+/>
             <DetectionResults />
           </div>
         )}
@@ -377,6 +604,28 @@ const ExoplanetDetectionApp = () => {
           </div>
         </div>
       </footer>
+
+      {/* 3D Visualization Overlay */}
+{show3DView && detectionResults?.planet_detected && (
+  <OrbitVisualizer
+    starName={starName || "Unknown Star"}
+    detections={[
+      {
+        name: `${starName || "Star"}-b`,
+        confidence: detectionResults.confidence,
+        period_days: detectionResults.period_days,
+        planet_radius_earth: detectionResults.planet_radius_earth,
+        transit_depth_ppm: detectionResults.transit_depth_ppm,
+        eq_temp_k: detectionResults.eq_temp_k || 1000,
+        folded_lightcurve: detectionResults.lightcurve_data ? {
+          phase: detectionResults.lightcurve_data.map((d, i) => (i / detectionResults.lightcurve_data.length) - 0.5),
+          flux: detectionResults.lightcurve_data.map(d => d.flux)
+        } : undefined
+      }
+    ]}
+    onClose={() => setShow3DView(false)}
+  />
+)}
     </div>
   );
 };
