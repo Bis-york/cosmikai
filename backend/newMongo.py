@@ -1,7 +1,8 @@
 # newMongo.py
 from pymongo import MongoClient
+from pymongo.errors import PyMongoError
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
 client = MongoClient("mongodb://localhost:27017/")
 db = client["exoplanet_DB"]
@@ -39,3 +40,21 @@ def save_result(result_json: Dict[str, Any]) -> Dict[str, Any]:
 
     collection.replace_one({"target": normalized_target}, record, upsert=True)
     return record
+
+
+def list_cached_targets() -> List[str]:
+    """Return a sorted list of the original target names stored in the cache."""
+    cursor = collection.find({}, {"_id": 0, "original_target": 1})
+    names = [str(doc.get("original_target", "")).strip() for doc in cursor]
+    return sorted({name for name in names if name})
+
+
+def database_status() -> Dict[str, Any]:
+    """Return basic health information about the MongoDB connection."""
+    try:
+        client.admin.command("ping")
+        count = collection.estimated_document_count()
+        return {"ok": True, "document_count": count}
+    except PyMongoError as exc:
+        return {"ok": False, "error": str(exc)}
+
