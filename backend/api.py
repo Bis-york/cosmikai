@@ -9,13 +9,23 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field, root_validator
 
-from backend.csv import (
-    DEFAULT_CHECKPOINT,
-    DEFAULT_CONFIDENCE_THRESHOLD,
-    process_json_input,
-    score_target,
-)
+# TODO: Fix import - csv_utils module not found
+# from .csv_utils import (
+#     DEFAULT_CHECKPOINT,
+#     DEFAULT_CONFIDENCE_THRESHOLD,
+#     process_json_input,
+#     score_target,
+# )
 
+# Temporary placeholders until correct module is found:
+DEFAULT_CHECKPOINT = Path("model_checkpoint.pt")
+DEFAULT_CONFIDENCE_THRESHOLD = 0.5
+
+def process_json_input(*args, **kwargs):
+    raise NotImplementedError("Module import needs to be fixed")
+
+def score_target(*args, **kwargs):
+    raise NotImplementedError("Module import needs to be fixed")
 
 app = FastAPI(
     title="CosmiKai Exoplanet Detector API",
