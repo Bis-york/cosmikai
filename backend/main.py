@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import json, subprocess, sys, os
 
-from connection import get_result_by_star_id, insert_result
+from backend.connection import get_result_by_star_id, insert_result
 
 app = FastAPI(title="Exoplanet Service", version="1.0.0")
 
@@ -75,7 +75,7 @@ async def analyze(req: AnalyzeRequest):
 
         # --- STAR ID path ---
         if has_star:
-            star_id = req.star_id.strip()
+            star_id = req.star_id.strip() if req.star_id is not None else ""
             cached = get_result_by_star_id(star_id)
             if cached and cached.get("result_json"):
                 print("✅ Found cached result for:", star_id)
@@ -92,7 +92,7 @@ async def analyze(req: AnalyzeRequest):
 
         # --- CSV path (optional for later) ---
         if has_csv:
-            csv_path = req.csv_path.strip()
+            csv_path = req.csv_path.strip() if req.csv_path is not None else ""
             raise HTTPException(status_code=400, detail="CSV path handling not implemented yet.")
 
     except RuntimeError as e:
@@ -100,14 +100,6 @@ async def analyze(req: AnalyzeRequest):
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         print("❌ Unexpected error:", e)
-        raise HTTPException(status_code=500, detail=f"Internal error: {e}")
-
-
-    except RuntimeError as e:
-        # Bubbled up from run_* helpers (script failures, bad JSON, etc.)
-        raise HTTPException(status_code=500, detail=str(e))
-    except Exception as e:
-        # Any unexpected error
         raise HTTPException(status_code=500, detail=f"Internal error: {e}")
 
 
