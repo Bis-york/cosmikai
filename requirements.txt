@@ -1,8 +1,10 @@
 numpy
-lightkurve
-astropy
-scikit-learn
+pandas
 torch
-
+scikit-learn
+astropy
+lightkurve
+batman-package
 fastapi
+pydantic
 uvicorn
