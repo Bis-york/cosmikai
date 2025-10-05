@@ -46,6 +46,10 @@ const ExoplanetDetectionApp = () => {
   const [inputMode, setInputMode] = useState('upload'); // 'upload' or 'query'
   const [starName, setStarName] = useState('');
   const [mission, setMission] = useState('Kepler');
+  const [customMission, setCustomMission] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [nBins, setNBins] = useState(2001);
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0.5);
 
   const FileUploadArea = () => (
     <div className="bg-white rounded-lg shadow-md p-6">
@@ -130,14 +134,87 @@ const ExoplanetDetectionApp = () => {
               </label>
               <select
                 value={mission}
-                onChange={(e) => setMission(e.target.value)}
+                onChange={(e) => {
+                  setMission(e.target.value);
+                  if (e.target.value !== 'Other') {
+                    setCustomMission('');
+                  }
+                }}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="Kepler">Kepler</option>
                 <option value="K2">K2</option>
                 <option value="TESS">TESS</option>
+                <option value="Other">Other</option>
               </select>
             </div>
+
+            {mission === 'Other' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Custom Mission Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., CoRoT, JWST, etc."
+                  value={customMission}
+                  onChange={(e) => setCustomMission(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            )}
+
+            {/* Advanced Options Toggle */}
+            <div className="pt-4 border-t border-gray-200">
+              <button
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className="flex items-center text-sm text-blue-600 hover:text-blue-800"
+              >
+                <Settings className="h-4 w-4 mr-1" />
+                {showAdvanced ? 'Hide' : 'Show'} Advanced Options
+              </button>
+            </div>
+
+            {/* Advanced Options Panel */}
+            {showAdvanced && (
+              <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Number of Bins (nBins)
+                  </label>
+                  <input
+                    type="number"
+                    value={nBins}
+                    onChange={(e) => setNBins(parseInt(e.target.value) || 2001)}
+                    min="100"
+                    max="10000"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Number of bins for the BLS periodogram (default: 2001)
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Confidence Threshold: {(confidenceThreshold * 100).toFixed(0)}%
+                  </label>
+                  <input
+                    type="range"
+                    min="0.1"
+                    max="0.9"
+                    step="0.05"
+                    value={confidenceThreshold}
+                    onChange={(e) => setConfidenceThreshold(parseFloat(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>10% (More Results)</span>
+                    <span>90% (Higher Precision)</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
