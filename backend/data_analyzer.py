@@ -5,9 +5,10 @@ import argparse
 import json
 import sys
 import math
+from time import perf_counter
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -455,20 +456,182 @@ def _slugify_target(label: str) -> str:
     return slug or "target"
 
 
-def _export_phase_curve_csv(phase_curve: np.ndarray, output_path: Path) -> Path:
+
+def _phase_curve_points(phase_curve: np.ndarray) -> List[List[float]]:
     nbins = len(phase_curve)
-    phases = (np.arange(nbins, dtype=np.float32) + 0.5) / max(float(nbins), 1.0)
-    df = pd.DataFrame(
-        {
-            "bin_index": np.arange(nbins, dtype=np.int32),
-            "phase": phases.astype(np.float32),
-            "normalized_flux": phase_curve.astype(np.float32),
-        }
-    )
+    if nbins <= 1:
+        phases = np.array([-0.5], dtype=np.float32)
+    else:
+        phases = np.linspace(-0.5, 0.5, nbins, endpoint=True, dtype=np.float32)
+    flux = phase_curve.astype(np.float32)
+    return [[float(phase), float(value)] for phase, value in zip(phases, flux)]
+
+
+def _json_ready(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _json_ready(val) for key, val in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_ready(val) for val in value]
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
+# Utility helpers to normalize optional values when building JSON outputs.
+
+def _coerce_optional_float(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    if isinstance(value, (bool, str)) and value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerce_optional_int(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, (bool, str)) and value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        try:
+            return int(float(value))
+        except (TypeError, ValueError):
+            return None
+
+
+def _coerce_optional_bool(value: Any) -> Optional[bool]:
+    if value is None:
+        return None
+    if isinstance(value, (np.bool_, bool)):
+        return bool(value)
+    if isinstance(value, (int, np.integer)):
+        return bool(int(value))
+    if isinstance(value, (float, np.floating)):
+        return bool(float(value))
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "y", "t"}:
+            return True
+        if normalized in {"false", "0", "no", "n", "f"}:
+            return False
+    return None
+
+
+def _infer_mission(data_source: Optional[str], raw_row: Mapping[str, Any]) -> Optional[str]:
+    if data_source:
+        lowered = data_source.lower()
+        if "tess" in lowered:
+            return "TESS"
+        if "kepler" in lowered or "koi" in lowered:
+            return "Kepler"
+    for key in ("mission", "origin_mission", "host_mission"):
+        value = raw_row.get(key)
+        if value:
+            return str(value)
+    target_name = raw_row.get("kepler_name")
+    if target_name:
+        return "Kepler"
+    return None
+
+
+def _export_phase_curve_json(
+    phase_curve: np.ndarray,
+    output_path: Path,
+    *,
+    checkpoint_path: Path,
+    bundle: ModelBundle,
+    result_payload: Dict[str, Any],
+    elapsed_seconds: float,
+) -> Path:
+    points = _phase_curve_points(phase_curve)
+    transit_parameters = result_payload.get("transit_parameters") or {}
+    raw_parameters = transit_parameters.get("raw_parameters") or {}
+
+    mission = result_payload.get("mission")
+    if mission is None:
+        mission = _infer_mission(result_payload.get("data_source"), raw_parameters)
+
+    label = result_payload.get("label") or raw_parameters.get("kepler_name") or result_payload.get("target")
+
+    planet_probability = _coerce_optional_float(result_payload.get("planet_probability"))
+    planet_probability_percent = _coerce_optional_float(result_payload.get("planet_probability_percent"))
+    if planet_probability_percent is None and planet_probability is not None:
+        planet_probability_percent = planet_probability * 100.0
+    if planet_probability_percent is not None:
+        planet_probability_percent = round(planet_probability_percent, 4)
+
+    has_candidate_value = result_payload.get("has_candidate")
+    if has_candidate_value is None:
+        has_candidate_value = False
+    else:
+        has_candidate_value = bool(has_candidate_value)
+
+    scaled_semimajor = transit_parameters.get("scaled_semimajor_axis")
+    if scaled_semimajor is None:
+        scaled_semimajor = transit_parameters.get("a")
+
+    record = {
+        "target": result_payload.get("target"),
+        "mission": mission,
+        "data_source": result_payload.get("data_source"),
+        "period_days": _coerce_optional_float(result_payload.get("period_days")),
+        "duration_days": _coerce_optional_float(result_payload.get("duration_days")),
+        "transit_time": _coerce_optional_float(result_payload.get("transit_time")),
+        "nbins": _coerce_optional_int(result_payload.get("nbins")),
+        "threshold": _coerce_optional_float(result_payload.get("threshold")),
+        "label": label,
+        "confidence": _coerce_optional_float(result_payload.get("confidence")),
+        "logit": _coerce_optional_float(result_payload.get("logit")),
+        "has_candidate": has_candidate_value,
+        "planet_probability": planet_probability,
+        "planet_probability_percent": planet_probability_percent,
+        "odd_even_match": _coerce_optional_bool(result_payload.get("odd_even_match")),
+        "odd_even_depth_delta": _coerce_optional_float(result_payload.get("odd_even_depth_delta")),
+        "no_secondary": _coerce_optional_bool(result_payload.get("no_secondary")),
+        "secondary_depth_fraction": _coerce_optional_float(result_payload.get("secondary_depth_fraction")),
+        "transit_depth_fraction": _coerce_optional_float(transit_parameters.get("depth") or result_payload.get("transit_depth_fraction")),
+        "size_vs_earth": _coerce_optional_float(result_payload.get("size_vs_earth") or raw_parameters.get("koi_prad")),
+        "a_over_r_star": _coerce_optional_float(result_payload.get("a_over_r_star") or scaled_semimajor or raw_parameters.get("koi_dor")),
+        "equilibrium_temperature_k": _coerce_optional_float(result_payload.get("equilibrium_temperature_k") or raw_parameters.get("koi_teq")),
+        "star_radius_rsun": _coerce_optional_float(result_payload.get("star_radius_rsun") or raw_parameters.get("koi_srad")),
+        "star_mass_msun": _coerce_optional_float(result_payload.get("star_mass_msun") or raw_parameters.get("koi_smass")),
+        "star_teff_k": _coerce_optional_float(result_payload.get("star_teff_k") or raw_parameters.get("koi_steff")),
+        "light_curve_points": points,
+    }
+
+    try:
+        checkpoint_relative = checkpoint_path.relative_to(ROOT_DIR)
+        checkpoint_value = checkpoint_relative.as_posix()
+    except ValueError:
+        checkpoint_value = str(checkpoint_path)
+
+    payload = {
+        "checkpoint": checkpoint_value,
+        "device": bundle.device.type,
+        "elapsed_seconds": float(round(elapsed_seconds, 6)),
+        "results": [record],
+    }
+
     output_path = Path(output_path)
+    if output_path.suffix.lower() != ".json":
+        output_path = output_path.with_suffix(".json")
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(output_path, index=False)
+    output_path.write_text(json.dumps(_json_ready(payload), indent=2))
     return output_path
+
+
+
 
 
 def _run_detection_from_config(
@@ -479,6 +642,9 @@ def _run_detection_from_config(
     threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
 ) -> Dict[str, Any]:
     config_copy = dict(config)
+    parameter_row = config_copy.pop("parameter_row", None)
+    parameter_row_index = config_copy.pop("parameter_row_index", None)
+    start_time = perf_counter()
 
     bundle = load_detector(checkpoint_path, device=device)
 
@@ -515,7 +681,48 @@ def _run_detection_from_config(
     transit_time = 0.0
     data_points = 0
 
-    if parameter_csv_path:
+    raw_row: Optional[Dict[str, Any]] = None
+    if parameter_row is not None:
+        raw_row = dict(parameter_row) if not isinstance(parameter_row, dict) else dict(parameter_row)
+        if parameter_csv_path:
+            if parameter_row_index is not None:
+                print(f"[INFO] Using cached parameter row {parameter_row_index} from CSV: {parameter_csv_path}")
+            else:
+                print(f"[INFO] Using provided parameter row from CSV: {parameter_csv_path}")
+        else:
+            print("[INFO] Using provided parameter row input.")
+
+        if target_override is not None:
+            label_candidate = str(target_override)
+        else:
+            candidate = raw_row.get(parameter_target_column)
+            if candidate is None or str(candidate).strip() == "":
+                candidate = raw_row.get("kepid")
+            label_candidate = str(candidate) if candidate is not None else None
+        if label_candidate is None or label_candidate.strip() == "":
+            if parameter_row_index is not None:
+                label_candidate = f"row-{parameter_row_index}"
+            else:
+                label_candidate = "parameter-row"
+        target_label = label_candidate
+
+        phase_curve, transit_parameters, phase_model, parameter_warning = generate_phase_curve_from_parameters(
+            raw_row,
+            nbins=effective_nbins,
+        )
+        period = float(transit_parameters["period_days"])
+        duration = float(transit_parameters["duration_days"])
+        transit_time = float(transit_parameters["transit_time"])
+        data_points = len(phase_curve)
+        if parameter_csv_path:
+            row_note = f" (row {parameter_row_index})" if parameter_row_index is not None else ""
+            data_source = f"Parameter CSV: {parameter_csv_path}{row_note}"
+        else:
+            data_source = "Parameter row input"
+        print(f"[INFO] Generating synthetic transit using {phase_model} model with {effective_nbins} bins...")
+        if parameter_warning:
+            print(f"[WARN] {parameter_warning}")
+    elif parameter_csv_path:
         print(f"[INFO] Loading transit parameters from CSV: {parameter_csv_path}")
         raw_row = load_parameter_row(
             parameter_csv_path,
@@ -562,6 +769,10 @@ def _run_detection_from_config(
     else:
         raise ValueError("Configuration must provide either 'parameter_csv' or 'csv_path'.")
 
+
+    if raw_row is not None and transit_parameters is not None:
+        transit_parameters.setdefault("raw_parameters", raw_row)
+
     if target_label is None:
         target_label = "unknown-target"
 
@@ -573,9 +784,13 @@ def _run_detection_from_config(
     else:
         base_dir = Path(output_dir_value) if output_dir_value else ROOT_DIR / "outputs"
         slug = _slugify_target(str(target_label))
-        phase_output_path = Path(base_dir) / f"{slug}_phase_curve.csv"
-
-    exported_phase_path = _export_phase_curve_csv(phase_curve, phase_output_path)
+        if parameter_row_index is not None:
+            try:
+                index_suffix = f"{int(parameter_row_index):04d}"
+            except (TypeError, ValueError):
+                index_suffix = str(parameter_row_index)
+            slug = f"{slug}_{index_suffix}" if slug else str(index_suffix)
+        phase_output_path = Path(base_dir) / f"{slug}_phase_curve.json"
 
     print("[INFO] Running neural network inference...")
     confidence, logit = score_phase_curve(phase_curve, bundle)
@@ -585,6 +800,9 @@ def _run_detection_from_config(
     fidelity = float(np.clip(fidelity, 0.0, 1.0))
     confidence_adjusted = float((confidence - 0.5) * fidelity + 0.5)
     fidelity_components = transit_parameters.get("fidelity_components") if transit_parameters else None
+
+    planet_probability = confidence
+    planet_probability_percent = planet_probability * 100.0
 
     result = {
         "target": str(target_label),
@@ -605,9 +823,12 @@ def _run_detection_from_config(
         "metadata": bundle.metadata,
         "phase_model": phase_model,
         "fidelity": fidelity,
-        "phase_curve_output": str(exported_phase_path),
+        "planet_probability": planet_probability,
+        "planet_probability_percent": planet_probability_percent,
         "phase_curve_points": len(phase_curve),
     }
+    if parameter_row_index is not None:
+        result["parameter_row_index"] = parameter_row_index
 
     if fidelity_components is not None:
         result["fidelity_components"] = fidelity_components
@@ -621,7 +842,96 @@ def _run_detection_from_config(
     if csv_file_path:
         result["light_curve_source"] = str(csv_file_path)
 
+    elapsed_seconds = perf_counter() - start_time
+    result["elapsed_seconds"] = elapsed_seconds
+
+    expected_output_path = (
+        phase_output_path
+        if phase_output_path.suffix.lower() == ".json"
+        else phase_output_path.with_suffix(".json")
+    )
+    result_for_export = dict(result)
+    result_for_export["phase_curve_output"] = str(expected_output_path)
+
+    exported_phase_path = _export_phase_curve_json(
+        phase_curve,
+        phase_output_path,
+        checkpoint_path=checkpoint_path,
+        bundle=bundle,
+        result_payload=result_for_export,
+        elapsed_seconds=elapsed_seconds,
+    )
+    result["phase_curve_output"] = str(exported_phase_path)
+
     return result
+
+
+def _run_batch_parameter_csv(
+    base_config: Dict[str, Any],
+    *,
+    checkpoint_path: Path,
+    device: Optional[str],
+    threshold: float,
+    max_rows: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    """Run detection for every row in a parameter CSV."""
+    config_copy = dict(base_config)
+    parameter_csv_value = config_copy.get("parameter_csv")
+    if not parameter_csv_value:
+        raise ValueError("Batch processing requires 'parameter_csv' to be provided.")
+
+    parameter_csv_path = Path(parameter_csv_value)
+    print(f"[BATCH] Loading parameter CSV for batch processing: {parameter_csv_path}")
+    try:
+        df = pd.read_csv(parameter_csv_path, comment="#", skip_blank_lines=True, low_memory=False)
+    except Exception as exc:  # pragma: no cover - batch convenience path
+        raise ValueError(f"Failed to read parameter CSV '{parameter_csv_path}': {exc}")
+
+    if df.empty:
+        raise ValueError(f"Parameter CSV '{parameter_csv_path}' is empty.")
+
+    limit = max_rows if max_rows is not None and max_rows > 0 else None
+    if config_copy.get("phase_curve_output"):
+        print("[WARN] Ignoring explicit phase-curve output path in batch mode; auto-naming per target.")
+        config_copy.pop("phase_curve_output", None)
+    config_copy.pop("target_name", None)
+
+    target_column = config_copy.get("parameter_target_column", "kepoi_name")
+    results: List[Dict[str, Any]] = []
+
+    for row_index, row in df.iterrows():
+        if limit is not None and len(results) >= limit:
+            break
+
+        row_dict = row.to_dict()
+        label_candidate = row_dict.get(target_column)
+        if label_candidate is None or str(label_candidate).strip() == "":
+            label_candidate = row_dict.get("kepid")
+        if label_candidate is None or str(label_candidate).strip() == "":
+            label_candidate = f"row-{row_index}"
+        label_str = str(label_candidate)
+
+        row_config = dict(config_copy)
+        row_config["target_name"] = label_str
+        row_config.pop("phase_curve_output", None)
+        row_config["parameter_row"] = row_dict
+        row_config["parameter_row_index"] = int(row_index) if isinstance(row_index, (int, np.integer)) else row_index
+
+        print(f"[BATCH] Processing row {row_index}: {label_str}")
+        result = _run_detection_from_config(
+            row_config,
+            checkpoint_path=checkpoint_path,
+            device=device,
+            threshold=threshold,
+        )
+        results.append(result)
+
+    if limit is not None and len(df) > limit:
+        print(f"[BATCH] Processed {len(results)} rows (limit={limit}); {len(df) - limit} rows skipped.")
+    else:
+        print(f"[BATCH] Processed {len(results)} rows from {parameter_csv_path}.")
+
+    return results
 
 def load_csv_light_curve(
     csv_path: Union[str, Path],
@@ -766,7 +1076,7 @@ def process_json_input(
         "csv_path": null,                        # Raw light curve CSV (mutually exclusive with parameter_csv)
         "time_column": "time",                   # Optional column name for raw light curve CSV
         "flux_column": "flux",                   # Optional column name for raw light curve CSV
-        "phase_curve_output": "outputs/kepler10_phase_curve.csv",  # Optional explicit output path
+        "phase_curve_output": "outputs/kepler10_phase_curve.json",  # Optional explicit output path
         "output_dir": "outputs",                # Optional directory for auto-named exports
         "nbins": 512,                            # Optional phase bin count
         "threshold": 0.5                         # Optional decision threshold
@@ -815,6 +1125,18 @@ def build_cli() -> argparse.ArgumentParser:
         help="Column name used to match the target inside the parameter CSV (default: kepoi_name).",
     )
     parser.add_argument(
+        "--all-parameter-rows",
+        action="store_true",
+        dest="all_parameter_rows",
+        help="Process every row in the parameter CSV and export one JSON per row.",
+    )
+    parser.add_argument(
+        "--max-rows",
+        type=int,
+        default=None,
+        help="Optional limit when using --all-parameter-rows to process only the first N rows.",
+    )
+    parser.add_argument(
         "--csv-path",
         dest="csv_path",
         help="Path to raw light curve CSV containing time and flux columns.",
@@ -832,12 +1154,12 @@ def build_cli() -> argparse.ArgumentParser:
     parser.add_argument(
         "--phase-curve-output",
         dest="phase_curve_output",
-        help="Optional explicit path for the exported phase-curve CSV.",
+        help="Optional explicit path for the exported phase-curve JSON file.",
     )
     parser.add_argument(
         "--output-dir",
         dest="output_dir",
-        help="Directory used when auto-generating the phase-curve CSV (default: <repo>/outputs).",
+        help="Directory used when auto-generating the phase-curve JSON (default: <repo>/outputs).",
     )
     parser.add_argument(
         "--checkpoint",
@@ -885,6 +1207,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 threshold=args.threshold,
             )
         else:
+            if args.all_parameter_rows and not args.parameter_csv:
+                print("[ERROR] --all-parameter-rows requires --parameter-csv.", file=sys.stderr)
+                return 1
             if not args.parameter_csv and not args.csv_path:
                 print("[ERROR] Provide --parameter-csv or --csv-path (or use --json).", file=sys.stderr)
                 return 1
@@ -903,6 +1228,27 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             }
             config = {k: v for k, v in config.items() if v is not None}
 
+            if args.all_parameter_rows:
+                batch_config = dict(config)
+                batch_config.pop("target_name", None)
+                batch_results = _run_batch_parameter_csv(
+                    batch_config,
+                    checkpoint_path=Path(args.checkpoint),
+                    device=args.device,
+                    threshold=args.threshold,
+                    max_rows=args.max_rows,
+                )
+
+                print("\n" + "=" * 70)
+                print("BATCH EXOPLANET DETECTION RESULTS")
+                print("=" * 70)
+                for item in batch_results:
+                    print(
+                        f"{item['target']}: conf={item['confidence']:.3f}, output={item.get('phase_curve_output', 'N/A')}"
+                    )
+                print(f"Processed {len(batch_results)} row(s) from {args.parameter_csv}.")
+                return 0
+
             result = _run_detection_from_config(
                 config,
                 checkpoint_path=Path(args.checkpoint),
@@ -919,7 +1265,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     print("=" * 70)
     print(f"Target: {result['target']}")
     print(f"Data source: {result.get('data_source', 'N/A')}")
-    print(f"Phase curve CSV: {result.get('phase_curve_output', 'N/A')}")
+    print(f"Phase curve JSON: {result.get('phase_curve_output', 'N/A')}")
     print(f"Phase bins used: {result['nbins']}")
     print(f"Data points processed: {result.get('data_points', 'N/A')}")
 
