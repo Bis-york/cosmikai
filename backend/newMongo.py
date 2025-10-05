@@ -1,12 +1,23 @@
 # newMongo.py
+import os
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-client = MongoClient("mongodb://localhost:27017/")
-db = client["exoplanet_DB"]
-collection = db["predictions"]
+# Mongo connection settings are configurable via environment variables.
+MONGO_URI = os.getenv("COSMIKAI_MONGO_URI", "mongodb://localhost:27017/")
+MONGO_DB = os.getenv("COSMIKAI_MONGO_DB", "exoplanet_DB")
+MONGO_COLLECTION = os.getenv("COSMIKAI_MONGO_COLLECTION", "predictions")
+
+client = MongoClient(MONGO_URI)
+db = client[MONGO_DB]
+collection = db[MONGO_COLLECTION]
+
+
+def mongo_config() -> Tuple[str, str, str]:
+    """Return the Mongo connection configuration being used."""
+    return MONGO_URI, MONGO_DB, MONGO_COLLECTION
 
 def normalize_target(target: str) -> str:
     """Normalize target names (case-insensitive and strip spaces)."""
@@ -57,4 +68,3 @@ def database_status() -> Dict[str, Any]:
         return {"ok": True, "document_count": count}
     except PyMongoError as exc:
         return {"ok": False, "error": str(exc)}
-
