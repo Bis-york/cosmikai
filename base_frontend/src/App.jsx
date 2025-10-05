@@ -430,10 +430,13 @@ const ExoplanetDetectionApp = () => {
             { file: 'k2_data.csv', result: 'Planet Detected', confidence: 0.78, time: '1 hour ago' },
             { file: 'lightcurve_x.csv', result: 'No Planet', confidence: 0.12, time: '2 hours ago' },
           ].map((item, index) => (
-            <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <button key={index} onClick={() => console.log('Clicked star:', item.file.replace(/\.[^/.]+$/, ''))}  className="w-full flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
+
               <div className="flex items-center">
                 <FileText className="h-4 w-4 text-gray-400 mr-2" />
-                <span className="font-medium">{item.file}</span>
+                <span className="font-medium">
+                {item.file.replace(/\.[^/.]+$/, '')}
+                </span>
               </div>
               <div className="flex items-center space-x-4 text-sm">
                 <span className={item.result === 'Planet Detected' ? 'text-green-600' : 'text-gray-600'}>
