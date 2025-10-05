@@ -27,9 +27,17 @@ except ImportError:  # pragma: no cover
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-MODEL_DIR = ROOT_DIR / "models"
+MODEL_DIR = Path(__file__).resolve().parent / "models"
 DEFAULT_CHECKPOINT = MODEL_DIR / "trained_exoplanet_detector.pth"
 DEFAULT_CONFIDENCE_THRESHOLD = 0.5
+
+
+def _require_bls() -> None:
+    """Ensure the BoxLeastSquares dependency is available."""
+    if BoxLeastSquares is None:
+        raise ImportError(
+            "astropy.timeseries.BoxLeastSquares is required. Install astropy with 'pip install astropy'."
+        )
 
 
 class SmallCNN(nn.Module):

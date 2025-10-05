@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, validator
 
 from backend.data_analyzer import process_json_input as run_data_analyzer
@@ -15,6 +16,19 @@ from backend.newMongo import (
 from backend.predict import process_json_input as run_lightcurve
 
 app = FastAPI(title="CosmiKai Prediction Gateway")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 _TargetKeys = ("target", "target_name", "star_id", "object_id")

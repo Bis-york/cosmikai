@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Upload, FileText, BarChart3, Settings, Zap, TrendingUp, AlertCircle, CheckCircle, XCircle, Eye, Download } from 'lucide-react';
 import OrbitVisualizer from './OrbitVisualiser';
 
@@ -21,7 +21,8 @@ const FileUploadArea = ({
   confidenceThreshold,
   setConfidenceThreshold,
   runDetection,
-  isProcessing
+  isProcessing,
+  errorMessage
 }) => (
   <div className="bg-white rounded-lg shadow-md p-6">
       {/* Toggle between Upload and Query modes */}
@@ -212,7 +213,7 @@ const FileUploadArea = ({
             {isProcessing ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                {inputMode === 'query' ? 'Fetching data from NASA archives...' : 'Analyzing Light Curve...'}
+                {inputMode === 'query' ? 'Fetching data from CosmiKai backend...' : 'Analyzing Light Curve...'}
               </>
             ) : (
               <>
@@ -221,6 +222,13 @@ const FileUploadArea = ({
               </>
             )}
           </button>
+
+          {errorMessage && (
+            <div className="mt-4 flex items-start gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">
+              <AlertCircle className="h-4 w-4 mt-0.5" />
+              <p>{errorMessage}</p>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -232,6 +240,8 @@ const ExoplanetDetectionApp = () => {
   const [uploadedFile, setUploadedFile] = useState(null);
   const [detectionResults, setDetectionResults] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [progressStep, setProgressStep] = useState(null);
+  const [errorMessage, setErrorMessage] = useState(null);
   const [modelStats, setModelStats] = useState({
     accuracy: 0.87,
     totalPredictions: 1247,
@@ -240,33 +250,104 @@ const ExoplanetDetectionApp = () => {
   });
 
   // Mock detection function - replace with actual API call
-  const runDetection = async () => {
-    setIsProcessing(true);
-    
-    // Simulate API processing time
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Mock results - replace with actual API response
-    const mockResults = {
-      planet_detected: Math.random() > 0.4,
-      confidence: Math.random() * 0.4 + 0.6, // 0.6-1.0
-      period_days: Math.random() * 10 + 1,
-      transit_depth_ppm: Math.random() * 5000 + 1000,
-      planet_radius_earth: Math.random() * 3 + 0.5,
-      processing_time_seconds: 1.8,
-      lightcurve_data: Array.from({length: 100}, (_, i) => ({
-        time: i * 0.1,
-        flux: 1.0 + (Math.random() - 0.5) * 0.01 - (i > 30 && i < 40 ? 0.02 : 0)
-      }))
+  const API_BASE_URL = useMemo(() => import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000', []);
+
+const runDetection = async () => {
+  setErrorMessage(null);
+  setIsProcessing(true);
+  setProgressStep('queued');
+  setDetectionResults(null);
+
+    if (inputMode === 'upload') {
+      setIsProcessing(false);
+      setErrorMessage('Bulk CSV uploads are not wired up yet. Switch to "Query by Star" to query the backend.');
+      return;
+    }
+
+    const trimmedStar = starName.trim();
+    if (!trimmedStar) {
+      setErrorMessage('Please enter a star name or identifier.');
+      setIsProcessing(false);
+      return;
+    }
+
+    const missionSelection = mission === 'Other' ? customMission.trim() : mission;
+    if (!missionSelection) {
+      setErrorMessage('Please specify the mission/survey to query.');
+      setIsProcessing(false);
+      return;
+    }
+
+    const payload = {
+      config: {
+        target_name: trimmedStar,
+        mission: missionSelection,
+      },
     };
-    
-    setDetectionResults(mockResults);
-    setIsProcessing(false);
-    setModelStats(prev => ({
-      ...prev,
-      totalPredictions: prev.totalPredictions + 1,
-      planetsFound: prev.planetsFound + (mockResults.planet_detected ? 1 : 0)
-    }));
+
+    if (nBins) {
+      payload.config.nbins = nBins;
+    }
+
+    if (confidenceThreshold) {
+      payload.threshold = Number(confidenceThreshold);
+    }
+
+    try {
+      setProgressStep('loading-lightcurve');
+      const response = await fetch(`${API_BASE_URL}/predict`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || `Request failed with status ${response.status}`);
+      }
+
+      setProgressStep('waiting-response');
+      const resultJson = await response.json();
+      const entries = Object.entries(resultJson);
+      if (!entries.length) {
+        throw new Error('Unexpected empty response from backend.');
+      }
+
+      setProgressStep('parsing-result');
+      const [target, details] = entries[0];
+      const detection = {
+        target,
+        mission: details.mission ?? missionSelection,
+        confidence: typeof details.confidence === 'number' ? details.confidence : 0,
+        threshold: typeof details.threshold === 'number' ? details.threshold : confidenceThreshold,
+        hasCandidate: Boolean(details.has_candidate),
+        periodDays: details.period_days ?? null,
+        durationDays: details.duration_days ?? null,
+        transitTime: details.transit_time ?? null,
+        device: details.device ?? 'unknown',
+        nbins: details.nbins ?? nBins,
+        dataPoints: details.data_points ?? null,
+        lightCurve: details.light_curve_points ?? [],
+        raw: details,
+      };
+
+      setDetectionResults(detection);
+      setModelStats(prev => ({
+        ...prev,
+        totalPredictions: prev.totalPredictions + 1,
+        planetsFound: prev.planetsFound + (detection.hasCandidate ? 1 : 0),
+      }));
+      setProgressStep(null);
+    } catch (error) {
+      console.error('Prediction request failed:', error);
+      setDetectionResults({ error: error.message || 'Unknown error occurred' });
+      setErrorMessage(error.message || 'Failed to contact CosmiKai backend.');
+      setProgressStep('failed');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const [inputMode, setInputMode] = useState('upload'); // 'upload' or 'query'
@@ -281,6 +362,7 @@ const ExoplanetDetectionApp = () => {
   const handleModeSwitch = (mode) => {
     setInputMode(mode);
     setDetectionResults(null);
+    setProgressStep(null);
     if (mode === 'upload') {
       setStarName('');
     } else {
@@ -292,38 +374,110 @@ const ExoplanetDetectionApp = () => {
     
   // );
 
-  const DetectionResults = () => {
+const DetectionResults = () => {
+    const showProgress = isProcessing || progressStep && progressStep !== 'completed' && !detectionResults;
+
+    if (showProgress) {
+      const steps = [
+        { id: 'queued', label: 'Queued request' },
+        { id: 'loading-lightcurve', label: 'Fetching light curve' },
+        { id: 'waiting-response', label: 'Running inference' },
+        { id: 'parsing-result', label: 'Preparing results' },
+      ];
+
+      const activeIndex = steps.findIndex((step) => step.id === progressStep);
+      const progressPercent = activeIndex >= 0 ? ((activeIndex + 1) / steps.length) * 100 : 5;
+
+      return (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+          <div className="flex items-center mb-4">
+            <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
+            <span className="text-green-800 font-medium">
+              {starName} ({mission})
+            </span>
+          </div>
+
+          <div className="relative overflow-hidden rounded-lg h-12 bg-blue-200/40 backdrop-blur">
+            <div
+              className="absolute inset-y-0 left-0 bg-blue-500/60 transition-all duration-500"
+              style={{ width: `${progressPercent}%` }}
+            />
+            <div className="relative z-10 flex items-center justify-center h-full text-white text-sm font-medium">
+              {steps[activeIndex]?.label ?? 'Starting...'}
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-gray-600">
+            {steps.map((step, index) => (
+              <div
+                key={step.id}
+                className={`flex items-center gap-2 p-2 rounded border text-gray-600 ${
+                  index <= activeIndex ? 'border-blue-300 bg-blue-50' : 'border-transparent'
+                }`}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    index < activeIndex
+                      ? 'bg-blue-500'
+                      : index === activeIndex
+                        ? 'bg-blue-400 animate-pulse'
+                        : 'bg-gray-300'
+                  }`}
+                />
+                {step.label}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
     if (!detectionResults) return null;
+
+    if (detectionResults.error) {
+      return (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-red-700 flex items-start gap-3">
+          <AlertCircle className="h-6 w-6 mt-1" />
+          <div>
+            <h2 className="text-xl font-semibold mb-1">Prediction failed</h2>
+            <p>{detectionResults.error}</p>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div className="space-y-6">
         {/* Main Result Card */}
-        <div className={`rounded-lg shadow-md p-6 ${detectionResults.planet_detected ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'} border`}>
+        <div className={`rounded-lg shadow-md p-6 ${detectionResults.hasCandidate ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'} border`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              {detectionResults.planet_detected ? (
+              {detectionResults.hasCandidate ? (
                 <CheckCircle className="h-8 w-8 text-green-600 mr-3" />
               ) : (
                 <XCircle className="h-8 w-8 text-gray-600 mr-3" />
               )}
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">
-                  {detectionResults.planet_detected ? '🪐 Exoplanet Detected!' : 'No Exoplanet Found'}
+                  {detectionResults.hasCandidate ? '🪐 Exoplanet Candidate Detected!' : 'No Confident Exoplanet Signal'}
                 </h2>
                 <p className="text-gray-600">
-                  Confidence: {(detectionResults.confidence * 100).toFixed(1)}%
+                  Confidence: {(detectionResults.confidence * 100).toFixed(1)}% (threshold {(detectionResults.threshold * 100).toFixed(0)}%)
+                </p>
+                <p className="text-sm text-gray-500">
+                  Target: {detectionResults.target} · Mission: {detectionResults.mission}
                 </p>
               </div>
             </div>
             <div className="text-right">
               <div className="text-sm text-gray-500">Processing Time</div>
-              <div className="text-lg font-semibold">{detectionResults.processing_time_seconds}s</div>
+              <div className="text-lg font-semibold">{(detectionResults.raw?.elapsed_seconds ?? 0).toFixed(2)}s</div>
             </div>
           </div>
         </div>
 
-        {/* Planet Parameters */}
-        {detectionResults.planet_detected && (
+        {/* Detection Parameters */}
+        {detectionResults.hasCandidate && (
           <div className="bg-white rounded-lg shadow-md p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
               <BarChart3 className="h-5 w-5 mr-2 text-blue-600" />
@@ -332,21 +486,21 @@ const ExoplanetDetectionApp = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="text-center p-4 bg-blue-50 rounded-lg">
                 <div className="text-2xl font-bold text-blue-600">
-                  {detectionResults.period_days.toFixed(2)}
+                  {detectionResults.periodDays ? detectionResults.periodDays.toFixed(2) : '—'}
                 </div>
                 <div className="text-sm text-gray-600">Orbital Period (days)</div>
               </div>
               <div className="text-center p-4 bg-purple-50 rounded-lg">
                 <div className="text-2xl font-bold text-purple-600">
-                  {detectionResults.transit_depth_ppm.toFixed(0)}
+                  {detectionResults.durationDays ? detectionResults.durationDays.toFixed(3) : '—'}
                 </div>
-                <div className="text-sm text-gray-600">Transit Depth (ppm)</div>
+                <div className="text-sm text-gray-600">Transit Duration (days)</div>
               </div>
               <div className="text-center p-4 bg-green-50 rounded-lg">
                 <div className="text-2xl font-bold text-green-600">
-                  {detectionResults.planet_radius_earth.toFixed(2)}
+                  {detectionResults.transitTime ? detectionResults.transitTime.toFixed(3) : '—'}
                 </div>
-                <div className="text-sm text-gray-600">Planet Radius (Earth = 1)</div>
+                <div className="text-sm text-gray-600">Transit Time (days)</div>
               </div>
             </div>
           </div>
@@ -366,7 +520,7 @@ const ExoplanetDetectionApp = () => {
             </div>
           </div>
           <div className="mt-4 flex justify-between items-center text-sm text-gray-600">
-            <span>Data points: {detectionResults.lightcurve_data?.length || 0}</span>
+            <span>Data points: {detectionResults.dataPoints ?? detectionResults.lightCurve.length ?? 0}</span>
             <div className="flex gap-2">
               <button
                 onClick={() => setShow3DView(true)}
@@ -564,26 +718,27 @@ const ExoplanetDetectionApp = () => {
         {activeTab === 'upload' && (
           <div className="space-y-8">
             <FileUploadArea 
-  inputMode={inputMode}
-  handleModeSwitch={handleModeSwitch}
-  uploadedFile={uploadedFile}
-  setUploadedFile={setUploadedFile}
-  setDetectionResults={setDetectionResults}
-  starName={starName}
-  setStarName={setStarName}
-  mission={mission}
-  setMission={setMission}
-  customMission={customMission}
-  setCustomMission={setCustomMission}
-  showAdvanced={showAdvanced}
-  setShowAdvanced={setShowAdvanced}
-  nBins={nBins}
-  setNBins={setNBins}
-  confidenceThreshold={confidenceThreshold}
-  setConfidenceThreshold={setConfidenceThreshold}
-  runDetection={runDetection}
-  isProcessing={isProcessing}
-/>
+              inputMode={inputMode}
+              handleModeSwitch={handleModeSwitch}
+              uploadedFile={uploadedFile}
+              setUploadedFile={setUploadedFile}
+              setDetectionResults={setDetectionResults}
+              starName={starName}
+              setStarName={setStarName}
+              mission={mission}
+              setMission={setMission}
+              customMission={customMission}
+              setCustomMission={setCustomMission}
+              showAdvanced={showAdvanced}
+              setShowAdvanced={setShowAdvanced}
+              nBins={nBins}
+              setNBins={setNBins}
+              confidenceThreshold={confidenceThreshold}
+              setConfidenceThreshold={setConfidenceThreshold}
+              runDetection={runDetection}
+              isProcessing={isProcessing}
+              errorMessage={errorMessage}
+            />
             <DetectionResults />
           </div>
         )}
@@ -606,26 +761,31 @@ const ExoplanetDetectionApp = () => {
       </footer>
 
       {/* 3D Visualization Overlay */}
-{show3DView && detectionResults?.planet_detected && (
-  <OrbitVisualizer
-    starName={starName || "Unknown Star"}
-    detections={[
-      {
-        name: `${starName || "Star"}-b`,
-        confidence: detectionResults.confidence,
-        period_days: detectionResults.period_days,
-        planet_radius_earth: detectionResults.planet_radius_earth,
-        transit_depth_ppm: detectionResults.transit_depth_ppm,
-        eq_temp_k: detectionResults.eq_temp_k || 1000,
-        folded_lightcurve: detectionResults.lightcurve_data ? {
-          phase: detectionResults.lightcurve_data.map((d, i) => (i / detectionResults.lightcurve_data.length) - 0.5),
-          flux: detectionResults.lightcurve_data.map(d => d.flux)
-        } : undefined
-      }
-    ]}
-    onClose={() => setShow3DView(false)}
-  />
-)}
+      {show3DView && detectionResults?.hasCandidate && (
+        <OrbitVisualizer
+          starName={detectionResults.target || starName || 'Unknown Star'}
+          detections={[
+            {
+              name: `${detectionResults.target || starName || 'Star'}-b`,
+              confidence: detectionResults.confidence,
+              period_days: detectionResults.periodDays ?? undefined,
+              planet_radius_earth: detectionResults.raw?.size_vs_earth ?? undefined,
+              transit_depth_ppm:
+                detectionResults.raw?.transit_depth_fraction != null
+                  ? detectionResults.raw.transit_depth_fraction * 1e6
+                  : undefined,
+              eq_temp_k: detectionResults.raw?.equilibrium_temperature_k ?? undefined,
+              folded_lightcurve: Array.isArray(detectionResults.lightCurve)
+                ? {
+                    phase: detectionResults.lightCurve.map((point) => point[0]),
+                    flux: detectionResults.lightCurve.map((point) => point[1]),
+                  }
+                : undefined,
+            },
+          ]}
+          onClose={() => setShow3DView(false)}
+        />
+      )}
     </div>
   );
 };

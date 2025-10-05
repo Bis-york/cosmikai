@@ -8,10 +8,11 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence, Tuple, Union
+import logging
 
 import numpy as np
 
-from data_analyzer import (
+from backend.data_analyzer import (
     DEFAULT_CHECKPOINT,
     DEFAULT_CONFIDENCE_THRESHOLD,
     ModelBundle,
@@ -27,6 +28,11 @@ except ImportError:  # pragma: no cover - surfaced at runtime
     lk = None
 
 JsonPayload = Union[str, Path, Dict[str, Any]]
+
+
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    logging.basicConfig(level=logging.INFO)
 
 
 @dataclass
@@ -48,6 +54,7 @@ def _ensure_lightkurve() -> None:
 @lru_cache(maxsize=4)
 def _load_model(checkpoint: str, device: Optional[str]) -> ModelBundle:
     checkpoint_path = Path(checkpoint)
+    logger.info("Loading detector checkpoint from %s (device=%s)", checkpoint_path, device or "auto")
     return load_detector(checkpoint_path, device=device)
 
 
@@ -158,8 +165,21 @@ def score_target(
     checkpoint_str = str(Path(checkpoint_path).expanduser().resolve())
     bundle = _load_model(checkpoint_str, device)
 
+    logger.info(
+        "Fetching light curve for target=%s mission=%s author=%s",
+        config.target,
+        config.mission,
+        config.author or "(any)",
+    )
     time, flux = _download_light_curve(config)
+    logger.info("Retrieved %d light curve points", len(flux))
     period_days, duration_days, transit_time = estimate_period(time, flux)
+    logger.info(
+        "Estimated period=%.4f days, duration=%.4f days, transit_time=%.4f",
+        period_days,
+        duration_days,
+        transit_time,
+    )
     phase_curve = fold_light_curve(
         time,
         flux,
@@ -167,10 +187,18 @@ def score_target(
         transit_time,
         nbins=config.nbins,
     )
+    logger.info("Folded light curve into %d bins", config.nbins)
     phase_axis = np.linspace(0.0, 1.0, config.nbins, endpoint=False, dtype=np.float32)
 
     confidence, logit = score_phase_curve(phase_curve, bundle)
     has_candidate = confidence >= config.threshold
+    logger.info(
+        "Inference complete for %s: confidence=%.4f (threshold=%.4f) -> %s",
+        config.target,
+        confidence,
+        config.threshold,
+        "candidate" if has_candidate else "no candidate",
+    )
 
     light_curve_points = [
         [float(phase_axis[i]), float(phase_curve[i])] for i in range(config.nbins)
@@ -217,7 +245,15 @@ def process_json_input(
     threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
 ) -> Dict[str, Any]:
     config_dict = _coerce_payload(payload)
+    logger.info("Processing JSON payload for inference: keys=%s", sorted(config_dict.keys()))
     target_config = _resolve_config(config_dict, default_threshold=threshold)
+    logger.info(
+        "Resolved config -> target=%s mission=%s nbins=%s threshold=%.3f",
+        target_config.target,
+        target_config.mission,
+        target_config.nbins,
+        target_config.threshold,
+    )
 
     result = score_target(
         target_config.target,
