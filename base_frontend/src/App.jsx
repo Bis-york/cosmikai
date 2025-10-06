@@ -1,6 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import OrbitVisualizer from './OrbitVisualizer';
+import { API_BASE_URL, VISUAL_BASE_URL } from './config';
 import { Upload, FileText, BarChart3, Settings, Zap, TrendingUp, AlertCircle, CheckCircle, XCircle, Eye, Download } from 'lucide-react';
-import OrbitVisualizer from './OrbitVisualiser';
+import OrbitVisualizer from './OrbitVisualizer';
 import logoBlack from './assets/logo-transp.png';
 
 const FileUploadArea = ({ 
@@ -258,14 +260,7 @@ const ExoplanetDetectionApp = () => {
   const [statsRefreshKey, setStatsRefreshKey] = useState(0);
 
   // Mock detection function - replace with actual API call
-  const API_BASE_URL = useMemo(
-    () => import.meta.env.VITE_API_BASE_URL ?? 'https://api.flyingwaffle.ca',
-    [],
-  );
-  const VISUAL_BASE_URL = useMemo(
-    () => import.meta.env.VITE_VISUAL_BASE_URL ?? 'https://visuals.flyingwaffle.ca',
-    [],
-  );
+  
 
 const runDetection = async () => {
   setErrorMessage(null);
@@ -273,11 +268,66 @@ const runDetection = async () => {
   setProgressStep('queued');
   setDetectionResults(null);
 
-    if (inputMode === 'upload') {
-      setIsProcessing(false);
-      setErrorMessage('Bulk CSV uploads are not wired up yet. Switch to "Query by Star" to query the backend.');
-      return;
-    }
+     if (inputMode === 'upload') {   try {
+     if (!uploadedFile) throw new Error('Please choose a CSV file.');
+     const text = await uploadedFile.text(); // read file in browser
+     // You can add star/mission fields in the UI if needed; keeping it simple here.
+     const payload = {
+       pipeline: 'data_analyzer',
+       config: {
+         parameter_csv: text,    // <<< key that triggers data_analyzer
+         mission: mission === 'Other' ? customMission.trim() : mission,
+       },
+       threshold: Number(confidenceThreshold),
+     };
+
+     setProgressStep('loading-lightcurve');
+     const response = await fetch(`${API_BASE_URL}/predict`, {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify(payload),
+     });
+     if (!response.ok) {
+       const message = await response.text();
+       throw new Error(message || `Request failed with status ${response.status}`);
+     }
+
+     setProgressStep('waiting-response');
+     const resultJson = await response.json();
+     const entries = Object.entries(resultJson);
+     if (!entries.length) throw new Error('Unexpected empty response from backend.');
+
+     setProgressStep('parsing-result');
+     const [target, details] = entries[0];   // same normalization as query path
+     const detection = {
+       target,
+       mission: details.mission ?? (mission === 'Other' ? customMission.trim() : mission),
+       confidence: Number(details.confidence ?? 0),
+       threshold: Number(details.threshold ?? confidenceThreshold),
+       hasCandidate: Boolean(details.has_candidate),
+       periodDays: details.period_days ?? null,
+       durationDays: details.duration_days ?? null,
+       transitTime: details.transit_time ?? null,
+       device: details.device ?? 'unknown',
+       nbins: details.nbins ?? nBins,
+       dataPoints: details.data_points ?? null,
+              lightCurve: details.light_curve_points ?? [],
+       raw: details,
+     };
+     setDetectionResults(detection);
+     setProgressStep(null);
+     setHistoryRefreshKey((k) => k + 1);
+     setStatsRefreshKey((k) => k + 1);
+   } catch (err) {
+     console.error(err);
+     setDetectionResults({ error: err.message || 'Upload failed' });
+     setErrorMessage(err.message || 'Upload failed');
+     setProgressStep('failed');
+   } finally {
+     setIsProcessing(false);
+   }
+   return;
+ }
 
     const trimmedStar = starName.trim();
     if (!trimmedStar) {
