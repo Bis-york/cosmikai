@@ -41,7 +41,7 @@ cosmikai/
 git clone https://github.com/<your-org>/cosmikai.git
 cd cosmikai
 
-2. Backend Setup (FastAPI)
+3. Backend Setup (FastAPI)
 
 Requires Python 3.9+
 
