@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { API_BASE_URL } from "./config";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Stars, Html } from "@react-three/drei";
 import * as THREE from "three";
@@ -371,10 +372,7 @@ export default function App() {
   const [detections, setDetections] = useState<Detection[]>([]);
   const [selected, setSelected] = useState<number | null>(0);
   const [showStarPanel, setShowStarPanel] = useState(false);
-  const API_BASE_URL = useMemo(
-    () => import.meta.env.VITE_API_BASE_URL ?? "https://api.flyingwaffle.ca",
-    [],
-  );
+  
 
   const performSearch = async (rawTarget: string) => {
     const trimmed = rawTarget.trim();
