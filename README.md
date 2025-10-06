@@ -67,20 +67,47 @@ Requires Node.js 18+
 
 cd base_frontend
 npm install
+1) Base app (base_frontend/)
+
+Copy env template and set URLs:
+
+cd base_frontend
+cp .env.example .env
 
 
-Create a .env file in base_frontend/:
+Set:
 
-VITE_API_BASE_URL=http://127.0.0.1:8000
+VITE_API_BASE_URL=https://api.yourdomain.tld
+
+VITE_VISUAL_BASE_URL=https://visuals.yourdomain.tld (where the visual explorer is hosted)
+
+Build and deploy the static site:
+
+npm install
+npm run build
 
 
-Run dev server:
+Host the dist/ folder on your domain (Vercel/Netlify/Cloudflare Pages/Nginx/etc).
 
-npm run dev
+2) Visual explorer (visual_frontend/)
+
+Copy env template and set:
+
+cd visual_frontend
+cp .env.example .env
 
 
-Frontend runs on → http://localhost:5173
- (port may vary).
+VITE_API_BASE_URL=https://api.yourdomain.tld
+
+Build and deploy:
+
+npm install
+npm run build
+
+
+Host the dist/ folder on your chosen domain.
+
+ 
 
 🧪 Usage
 
@@ -129,47 +156,6 @@ Create a feature branch (git checkout -b feat/my-feature)
 Commit changes (git commit -m "feat: add something")
 
 Push branch & open a Pull Request
-
-
-1) Base app (base_frontend/)
-
-Copy env template and set URLs:
-
-cd base_frontend
-cp .env.example .env
-
-
-Set:
-
-VITE_API_BASE_URL=https://api.yourdomain.tld
-
-VITE_VISUAL_BASE_URL=https://visuals.yourdomain.tld (where the visual explorer is hosted)
-
-Build and deploy the static site:
-
-npm install
-npm run build
-
-
-Host the dist/ folder on your domain (Vercel/Netlify/Cloudflare Pages/Nginx/etc).
-
-2) Visual explorer (visual_frontend/)
-
-Copy env template and set:
-
-cd visual_frontend
-cp .env.example .env
-
-
-VITE_API_BASE_URL=https://api.yourdomain.tld
-
-Build and deploy:
-
-npm install
-npm run build
-
-
-Host the dist/ folder on your chosen domain.
 
 📜 License
 
