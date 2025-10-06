@@ -68,19 +68,49 @@ Requires Node.js 18+
 cd base_frontend
 npm install
 
+If you want to run on your device/domain.
 
-Create a .env file in base_frontend/:
+1) Base app (base_frontend/)
 
-VITE_API_BASE_URL=http://127.0.0.1:8000
+Copy env template and set URLs:
 
-
-Run dev server:
-
-npm run dev
+cd base_frontend
+cp .env.example .env
 
 
-Frontend runs on → http://localhost:5173
- (port may vary).
+Set:
+
+VITE_API_BASE_URL=https://api.yourdomain.tld
+
+VITE_VISUAL_BASE_URL=https://visuals.yourdomain.tld (where the visual explorer is hosted)
+
+Build and deploy the static site:
+
+npm install
+npm run build
+
+
+Host the dist/ folder on your domain (Vercel/Netlify/Cloudflare Pages/Nginx/etc).
+
+2) Visual explorer (visual_frontend/)
+
+Copy env template and set:
+
+cd visual_frontend
+cp .env.example .env
+
+
+VITE_API_BASE_URL=https://api.yourdomain.tld
+
+Build and deploy:
+
+npm install
+npm run build
+
+
+Host the dist/ folder on your chosen domain.
+
+ 
 
 🧪 Usage
 
