@@ -67,6 +67,9 @@ Requires Node.js 18+
 
 cd base_frontend
 npm install
+
+If you want to run on your device/domain.
+
 1) Base app (base_frontend/)
 
 Copy env template and set URLs:
