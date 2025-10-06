@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import OrbitVisualizer from './OrbitVisualizer';
 import { API_BASE_URL, VISUAL_BASE_URL } from './config';
 import { Upload, FileText, BarChart3, Settings, Zap, TrendingUp, AlertCircle, CheckCircle, XCircle, Eye, Download } from 'lucide-react';
-import OrbitVisualizer from './OrbitVisualizer';
 import logoBlack from './assets/logo-transp.png';
 
 const FileUploadArea = ({ 
