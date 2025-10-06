@@ -1,6 +1,0 @@
-{
-    "target_name": "Kepler-10",
-    "mission": "Kepler",
-    "threshold": 0.5,
-    "nbins": 512
-}

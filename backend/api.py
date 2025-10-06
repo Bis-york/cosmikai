@@ -104,7 +104,6 @@ async def api_score_target(request: ScoreTargetRequest) -> Dict[str, Any]:
             request.target,
             checkpoint_path=checkpoint_path,
             mission=request.mission,
-            author=request.author,
             nbins=request.nbins,
             device=request.device,
             threshold=request.threshold,

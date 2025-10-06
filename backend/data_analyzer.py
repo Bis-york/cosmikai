@@ -263,7 +263,7 @@ def _prepare_transit_inputs(raw: Dict[str, Any]) -> Dict[str, Any]:
     scaled_a_value = _coerce_float(raw.get("koi_dor") or raw.get("a_rs") or raw.get("scaled_semimajor"))
     scaled_a_provided = scaled_a_value is not None and scaled_a_value > 1.0
     scaled_a = scaled_a_value if scaled_a_provided else 10.0
-    scaled_a = max(scaled_a, 1.001)
+    scaled_a = max(scaled_a, 1.001) # type: ignore
     scaled_a_quality = _estimate_quality("koi_dor", scaled_a_value) if scaled_a_provided else 0.0
     _score("koi_dor", scaled_a_provided, scaled_a_quality)
 

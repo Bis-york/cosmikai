@@ -1,4 +1,4 @@
-"""Simplified lightkurve-based inference helpers for CosmiKai."""
+"""Uses lightkurve for light curve analysis from the target star and mission."""
 from __future__ import annotations
 
 import argparse
@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional, Sequence, Tuple, Union
 import logging
 
 import numpy as np
+
 
 from backend.data_analyzer import (
     DEFAULT_CHECKPOINT,
@@ -39,7 +40,6 @@ if not logger.handlers:
 class TargetConfig:
     target: str
     mission: str
-    author: Optional[str]
     nbins: int
     threshold: float
 
@@ -76,11 +76,10 @@ def _download_light_curve(config: TargetConfig) -> Tuple[np.ndarray, np.ndarray]
     search = lk.search_lightcurve( # type: ignore
         config.target,
         mission=config.mission,
-        author=config.author,
     )
     if search is None or len(search) == 0:
         raise ValueError(
-            f"No light curve found for target='{config.target}' mission='{config.mission}' author='{config.author}'."
+            f"No light curve found for target='{config.target}' mission='{config.mission}'."
         )
 
     collection = search.download_all()
@@ -123,9 +122,6 @@ def _resolve_config(payload: Dict[str, Any], *, default_threshold: float) -> Tar
     if not mission:
         raise ValueError("JSON payload must include a mission field (e.g. 'Kepler' or 'TESS').")
 
-    author = payload.get("author")
-    author_value = str(author).strip() if isinstance(author, str) else None
-
     nbins = payload.get("nbins")
     nbins_value = int(nbins) if nbins is not None else 512
     if nbins_value <= 0:
@@ -138,7 +134,6 @@ def _resolve_config(payload: Dict[str, Any], *, default_threshold: float) -> Tar
     return TargetConfig(
         target=target_value,
         mission=mission,
-        author=author_value,
         nbins=nbins_value,
         threshold=threshold,
     )
@@ -148,7 +143,6 @@ def score_target(
     target: Union[str, int],
     *,
     mission: str,
-    author: Optional[str] = None,
     nbins: Optional[int] = None,
     device: Optional[str] = None,
     threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
@@ -157,7 +151,6 @@ def score_target(
     config = TargetConfig(
         target=str(target),
         mission=mission,
-        author=author,
         nbins=nbins if nbins is not None else 512,
         threshold=float(threshold),
     )
@@ -166,10 +159,9 @@ def score_target(
     bundle = _load_model(checkpoint_str, device)
 
     logger.info(
-        "Fetching light curve for target=%s mission=%s author=%s",
+        "Fetching light curve for target=%s mission=%s",
         config.target,
         config.mission,
-        config.author or "(any)",
     )
     time, flux = _download_light_curve(config)
     logger.info("Retrieved %d light curve points", len(flux))
@@ -207,7 +199,7 @@ def score_target(
     return {
         "target": config.target,
         "mission": config.mission,
-        "author": config.author,
+        "author": "empty",
         "nbins": config.nbins,
         "threshold": config.threshold,
         "confidence": float(confidence),
@@ -258,7 +250,6 @@ def process_json_input(
     result = score_target(
         target_config.target,
         mission=target_config.mission,
-        author=target_config.author,
         nbins=target_config.nbins,
         device=device,
         threshold=target_config.threshold,
@@ -268,7 +259,6 @@ def process_json_input(
     result["config_used"] = {
         "target": target_config.target,
         "mission": target_config.mission,
-        "author": target_config.author,
         "nbins": target_config.nbins,
         "threshold": target_config.threshold,
     }
