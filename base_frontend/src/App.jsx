@@ -687,13 +687,13 @@ const DetectionResults = () => {
           <div className="mt-4 flex justify-between items-center text-sm text-gray-600">
             <span>Data points: {detectionResults.dataPoints ?? detectionResults.lightCurve.length ?? 0}</span>
             <div className="flex gap-2">
-              <button
+              {/* <button
                 onClick={() => setShow3DView(true)}
                 className="flex items-center text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition-colors"
               >
                 <Eye className="h-4 w-4 mr-1" />
                 View in 3D
-              </button>
+              </button> */}
               <button className="flex items-center text-blue-600 hover:text-blue-800">
                 <Download className="h-4 w-4 mr-1" />
                 Export Data
