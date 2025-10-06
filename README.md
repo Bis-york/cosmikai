@@ -5,32 +5,26 @@
 *** Replace placeholder values (owner, repo, contact info) with your project details.
 -->
 
-[![Contributors][contributors-shield]][contributors-url]
-[![Forks][forks-shield]][forks-url]
-[![Stargazers][stars-shield]][stars-url]
-[![Issues][issues-shield]][issues-url]
-[![license][license-shield]][license-url]
-[![LinkedIn][linkedin-shield]][linkedin-url]
 
 <br />
 <div align="center">
-  <a href="https://github.com/github_username/repo_name">
-    <img src="images/logo.png" alt="Logo" width="96" height="96">
+  <a href="https://github.com/Bis-york/cosmikai">
+    <img src="https://github.com/Bis-york/cosmikai/blob/main/Copy_of_logos/logo%20black.png?raw=true" alt="Logo" width="96" height="96">
   </a>
 
-<h3 align="center">CosmiKai Exoplanet Detection Suite</h3>
+<h2 align="center">CosmiKai Exoplanet Detection Suite</h3>
 
   <p align="center">
     A hybrid research stack for detecting exoplanet candidates from Kepler and TESS light curves.
     <br />
-    <a href="https://github.com/github_username/repo_name"><strong>Explore the docs &raquo;</strong></a>
+    <a href="https://github.com/Bis-york/cosmikai"><strong>Explore the docs &raquo;</strong></a>
     <br />
     <br />
-    <a href="https://github.com/github_username/repo_name#usage">View Demo</a>
+    <a href="https://github.com/Bis-york/cosmikai#usage">View Demo</a>
     &middot;
-    <a href="https://github.com/github_username/repo_name/issues/new?labels=bug&template=bug-report---.md">Report Bug</a>
+    <a href="https://github.com/Bis-york/cosmikai/issues/new?labels=bug&template=bug-report---.md">Report Bug</a>
     &middot;
-    <a href="https://github.com/github_username/repo_name/issues/new?labels=enhancement&template=feature-request---.md">Request Feature</a>
+    <a href="https://github.com/Bis-york/cosmikai/issues/new?labels=enhancement&template=feature-request---.md">Request Feature</a>
   </p>
 </div>
 
@@ -109,7 +103,7 @@ npm install -g npm@latest                              # optional: front-end too
 
 1. Clone the repository
    ```sh
-   git clone https://github.com/github_username/repo_name.git
+   git clone https://github.com/Bis-york/cosmikai.git
    cd repo_name
    ```
 2. Activate your virtual environment and install backend requirements
@@ -129,7 +123,7 @@ npm install -g npm@latest                              # optional: front-end too
    - Copy sample configs (`backend/example_*`) and adjust mission/author/threshold values.
 5. Update Git remotes if you forked the template
    ```sh
-   git remote set-url origin git@github.com:github_username/repo_name.git
+   git remote set-url origin git@github.com:Bis-york/cosmikai.git
    git remote -v
    ```
 
@@ -176,7 +170,7 @@ _For more examples, explore the `/guides` directory and the sample notebooks in 
     - [ ] Plug into Lightkurve bulk download pipeline
 - [ ] Publish Docker images for backend + frontend
 
-See the [open issues](https://github.com/github_username/repo_name/issues) for the full list of proposed features.
+See the [open issues](https://github.com/Bis-york/cosmikai/issues) for the full list of proposed features.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -225,16 +219,16 @@ Project Link: [https://github.com/Bis-york/cosmikai](https://github.com/Bis-york
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- MARKDOWN LINKS & IMAGES -->
-[contributors-shield]: https://img.shields.io/github/contributors/github_username/repo_name.svg?style=for-the-badge
-[contributors-url]: https://github.com/github_username/repo_name/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/github_username/repo_name.svg?style=for-the-badge
-[forks-url]: https://github.com/github_username/repo_name/network/members
-[stars-shield]: https://img.shields.io/github/stars/github_username/repo_name.svg?style=for-the-badge
-[stars-url]: https://github.com/github_username/repo_name/stargazers
-[issues-shield]: https://img.shields.io/github/issues/github_username/repo_name.svg?style=for-the-badge
-[issues-url]: https://github.com/github_username/repo_name/issues
-[license-shield]: https://img.shields.io/github/license/github_username/repo_name.svg?style=for-the-badge
-[license-url]: https://github.com/github_username/repo_name/blob/main/LICENSE
+[contributors-shield]: https://img.shields.io/github/contributors/Bis-york/cosmikai.svg?style=for-the-badge
+[contributors-url]: https://github.com/Bis-york/cosmikai/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/Bis-york/cosmikai.svg?style=for-the-badge
+[forks-url]: https://github.com/Bis-york/cosmikai/network/members
+[stars-shield]: https://img.shields.io/github/stars/Bis-york/cosmikai.svg?style=for-the-badge
+[stars-url]: https://github.com/Bis-york/cosmikai/stargazers
+[issues-shield]: https://img.shields.io/github/issues/Bis-york/cosmikai.svg?style=for-the-badge
+[issues-url]: https://github.com/Bis-york/cosmikai/issues
+[license-shield]: https://img.shields.io/github/license/Bis-york/cosmikai.svg?style=for-the-badge
+[license-url]: https://github.com/Bis-york/cosmikai/blob/main/LICENSE
 [linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
 [linkedin-url]: https://linkedin.com/in/linkedin_username
 [product-screenshot]: images/screenshot.png
@@ -253,6 +247,8 @@ Project Link: [https://github.com/Bis-york/cosmikai](https://github.com/Bis-york
 [React.js]: https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB
 [React-url]: https://reactjs.org/
 [Vite-url]: https://vitejs.dev/
+
+
 
 
 
