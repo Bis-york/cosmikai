@@ -22,26 +22,21 @@ COPY requirements.txt .
 RUN pip install --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
-COPY backend ./backend
-COPY server_setup.py ./server_setup.py
+COPY . ./
 
 ARG BASE_API_URL=api.flyingwaffle.ca
 ARG BASE_VISUAL_URL=visuals.flyingwaffle.ca
 ARG VISUAL_API_URL=api.flyingwaffle.ca
 
 WORKDIR /app/base_frontend
-COPY base_frontend/package*.json ./
 RUN npm install
-COPY base_frontend/ .
 RUN VITE_API_BASE_URL=${BASE_API_URL} \
     VITE_VISUAL_BASE_URL=${BASE_VISUAL_URL} \
     npm run build \
     && rm -rf node_modules
 
 WORKDIR /app/visual_frontend
-COPY visual_frontend/package*.json ./
 RUN npm install
-COPY visual_frontend/ .
 RUN VITE_API_BASE_URL=${VISUAL_API_URL} \
     npm run build \
     && rm -rf node_modules
