@@ -29,8 +29,8 @@ services:
       dockerfile: Dockerfile
     container_name: cosmikai-base-frontend
     environment:
-      VITE_API_BASE_URL: http://localhost:8000
-      VITE_VISUAL_BASE_URL: http://localhost:5173
+      VITE_API_BASE_URL: api.flyingwaffle.ca
+      VITE_VISUAL_BASE_URL: visuals.flyingwaffle.ca
     ports:
       - "5180:5180"
     depends_on:
@@ -43,7 +43,7 @@ services:
       dockerfile: Dockerfile
     container_name: cosmikai-visual-frontend
     environment:
-      VITE_API_BASE_URL: http://localhost:8000
+      VITE_API_BASE_URL: api.flyingwaffle.ca
     ports:
       - "5173:5173"
     depends_on:
