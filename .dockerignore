@@ -1,0 +1,16 @@
+.git
+.gitignore
+.vscode
+.venv
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.swp
+
+node_modules/
+base_frontend/node_modules/
+visual_frontend/node_modules/
+copy_of_logos/
+data_test/
+model code/
+*.log
