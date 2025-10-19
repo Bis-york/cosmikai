@@ -166,6 +166,8 @@ npm install -g npm@latest                              # optional: front-end too
     cd visual_frontend
     npm run dev
     ```
+  - make sure to run a mongodb server
+  - Make sure to run some inference on star planets to use the visualizer in stats and to see it in mongodb 
 
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
