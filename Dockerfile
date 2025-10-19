@@ -46,6 +46,7 @@ RUN VITE_API_BASE_URL=${VISUAL_API_URL} \
     && rm -rf node_modules
 
 WORKDIR /app
+ENV PYTHONPATH=/app
 
 COPY docker/supervisord.conf /etc/supervisor/conf.d/cosmikai.conf
 
