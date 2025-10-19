@@ -16,6 +16,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+ENV PYTHONPATH=/app
 
 COPY requirements.txt .
 RUN pip install --upgrade pip \
@@ -46,7 +47,7 @@ RUN VITE_API_BASE_URL=${VISUAL_API_URL} \
     && rm -rf node_modules
 
 WORKDIR /app
-ENV PYTHONPATH=/app
+
 
 COPY docker/supervisord.conf /etc/supervisor/conf.d/cosmikai.conf
 
