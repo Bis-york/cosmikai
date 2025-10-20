@@ -17,17 +17,17 @@ RUN pip install --upgrade pip \
     && pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy backend packaging metadata separately for build caching.
-COPY backend/pyproject.toml backend/setup.cfg /app/backend/
+COPY pyproject.toml setup.cfg /app/
 
 # Copy backend source code and server entrypoint.
-COPY backend /app/backend
+COPY . /app
 COPY server_setup.py /app/server_setup.py
 
 # Install the backend package in editable mode so imports resolve cleanly.
-RUN pip install --no-cache-dir -e /app/backend
+RUN pip install --no-cache-dir -e /app
 
 # Ensure the application package is on Python's module search path.
-ENV PYTHONPATH="/app:/app/backend"
+ENV PYTHONPATH="/app:/app/"
 
 # Default environment configuration; can be overridden at runtime.
 ENV COSMIKAI_MONGO_URI="mongodb://mongo:27017/" \
