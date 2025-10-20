@@ -3,7 +3,7 @@ version: "3.9"
 services:
   visual-frontend:
     build:
-      context: ./visual_frontend
+      context: ./
       dockerfile: Dockerfile
     container_name: cosmikai-visual-frontend
     environment:
