@@ -4,6 +4,8 @@ This is the standalone backend API for CosmiKai exoplanet detection.
 
 ## Running with Docker
 
+**Prerequisites**: You need MongoDB already running on your machine (default: `localhost:27017`)
+
 ### Option 1: Using Docker Compose (Recommended)
 
 From the `backend/` directory:
@@ -13,9 +15,11 @@ docker-compose up --build
 ```
 
 This will:
-- Start a MongoDB container
 - Build and start the backend API container
+- Connect to your existing MongoDB on the host machine
 - Expose the API on `http://localhost:8000`
+
+**Note**: The default configuration connects to `mongodb://host.docker.internal:27017/`. If your MongoDB is elsewhere, edit `docker-compose.yml` or set environment variables.
 
 ### Option 2: Using Docker only
 
@@ -24,12 +28,17 @@ Build the image:
 docker build -t cosmikai-backend .
 ```
 
-Run with a MongoDB connection:
+Run and connect to your MongoDB:
 ```bash
 docker run -p 8000:8000 \
-  -e COSMIKAI_MONGO_URI="mongodb://your-mongo-host:27017/" \
+  -e COSMIKAI_MONGO_URI="mongodb://host.docker.internal:27017/" \
   cosmikai-backend
 ```
+
+**MongoDB Connection Notes**:
+- `host.docker.internal` - Connects to services on your host machine (Windows/Mac)
+- For Linux, use `--network host` or `mongodb://172.17.0.1:27017/`
+- For remote MongoDB, use the full connection string
 
 ## Running Locally (Development)
 
@@ -83,7 +92,7 @@ Once running, visit:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `COSMIKAI_MONGO_URI` | `mongodb://mongo:27017/` | MongoDB connection URI |
+| `COSMIKAI_MONGO_URI` | `mongodb://host.docker.internal:27017/` | MongoDB connection URI (points to host machine MongoDB) |
 | `COSMIKAI_MONGO_DB` | `exoplanet_DB` | MongoDB database name |
 | `COSMIKAI_MONGO_COLLECTION` | `predictions` | MongoDB collection name |
 
@@ -91,8 +100,8 @@ Once running, visit:
 
 ```
 backend/
-├── Dockerfile              # Container definition
-├── docker-compose.yml      # Docker Compose setup with MongoDB
+├── Dockerfile              # Container definition (backend only)
+├── docker-compose.yml      # Docker Compose setup (connects to existing MongoDB)
 ├── requirements.txt        # Python dependencies
 ├── server_setup.py         # Server entrypoint with MongoDB check
 ├── newmain.py             # FastAPI application
@@ -102,6 +111,12 @@ backend/
 ├── api.py                 # Alternative API endpoints
 └── models/                # Trained model checkpoints
 ```
+
+## Notes
+
+- This backend expects MongoDB to already be running
+- No MongoDB container is created (you manage your own MongoDB)
+- Frontend folders are not included in this Docker setup
 
 ## Development
 

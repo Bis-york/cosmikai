@@ -46,6 +46,18 @@ The backend directory has been configured to run independently without requiring
 
 ## How to Use
 
+### Prerequisites
+✅ **MongoDB must already be running** on your machine (default: `localhost:27017`)
+
+You can verify with:
+```powershell
+# Windows/PowerShell
+mongosh --eval "db.version()"
+
+# Or check if service is running
+Get-Service -Name MongoDB
+```
+
 ### From the `backend/` directory:
 
 #### Quick Test (PowerShell on Windows)
@@ -60,24 +72,26 @@ bash test_docker.sh
 
 #### Production Use with Docker Compose
 ```bash
-# Start everything (MongoDB + API)
+# Start API only (connects to your existing MongoDB)
 docker-compose up --build
 
-# Stop everything
+# Stop
 docker-compose down
 
 # View logs
 docker-compose logs -f backend
 ```
 
-#### Standalone Docker (if you have MongoDB elsewhere)
+**Note**: No MongoDB container is created. The backend connects to your existing MongoDB via `host.docker.internal:27017`
+
+#### Standalone Docker
 ```bash
 # Build
 docker build -t cosmikai-backend .
 
-# Run
+# Run (connects to your MongoDB on host)
 docker run -p 8000:8000 \
-  -e COSMIKAI_MONGO_URI="mongodb://your-mongo-host:27017/" \
+  -e COSMIKAI_MONGO_URI="mongodb://host.docker.internal:27017/" \
   cosmikai-backend
 ```
 
@@ -123,9 +137,19 @@ This caused `ModuleNotFoundError` in Docker because Python couldn't resolve the 
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `COSMIKAI_MONGO_URI` | `mongodb://mongo:27017/` | MongoDB connection string |
+| `COSMIKAI_MONGO_URI` | `mongodb://host.docker.internal:27017/` | MongoDB connection string (points to host machine) |
 | `COSMIKAI_MONGO_DB` | `exoplanet_DB` | Database name |
 | `COSMIKAI_MONGO_COLLECTION` | `predictions` | Collection name |
+
+### MongoDB Connection Strings by Platform
+
+| Platform | Connection String |
+|----------|------------------|
+| **Windows (Docker Desktop)** | `mongodb://host.docker.internal:27017/` |
+| **Mac (Docker Desktop)** | `mongodb://host.docker.internal:27017/` |
+| **Linux** | `mongodb://172.17.0.1:27017/` (or use `--network host`) |
+| **Remote MongoDB** | `mongodb://your-server-ip:27017/` |
+| **MongoDB Atlas** | `mongodb+srv://user:pass@cluster.mongodb.net/` |
 
 ## Next Steps
 
@@ -139,11 +163,19 @@ This caused `ModuleNotFoundError` in Docker because Python couldn't resolve the 
 **Import errors?**
 - Verify all imports in Python files use relative syntax (`.module`)
 - Check PYTHONPATH is set to `/app` in container
+- Rebuild: `docker-compose up --build`
 
 **MongoDB connection fails?**
-- Verify MongoDB is running
-- Check COSMIKAI_MONGO_URI is correct
-- Wait 20 seconds for MongoDB to initialize
+- ✅ **Verify YOUR MongoDB is running** on `localhost:27017`
+  - Windows: `Get-Service MongoDB` or `mongosh`
+  - Mac/Linux: `brew services list` or `systemctl status mongod`
+- Check if `host.docker.internal` resolves (Windows/Mac should work, Linux needs `172.17.0.1`)
+- Verify connection string in `docker-compose.yml`
+- Check MongoDB is accessible (not behind firewall)
+
+**"host.docker.internal" not found (Linux)?**
+- Edit `docker-compose.yml` and change to `mongodb://172.17.0.1:27017/`
+- Or run with `--network host`: `docker run --network host cosmikai-backend`
 
 **Build fails?**
 - Check Docker is running
@@ -153,3 +185,8 @@ This caused `ModuleNotFoundError` in Docker because Python couldn't resolve the 
 **Port already in use?**
 - Change port mapping: `-p 8001:8000`
 - Or stop other services using port 8000
+
+**Backend starts but can't reach MongoDB?**
+- Test connection from host: `mongosh mongodb://localhost:27017`
+- If MongoDB requires authentication, update URI: `mongodb://user:pass@host.docker.internal:27017/`
+- Check MongoDB is not bound to 127.0.0.1 only (should bind to 0.0.0.0 or allow docker subnet)

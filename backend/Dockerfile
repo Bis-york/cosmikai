@@ -28,7 +28,8 @@ RUN touch /app/__init__.py
 ENV PYTHONPATH="/app"
 
 # Default environment configuration; can be overridden at runtime
-ENV COSMIKAI_MONGO_URI="mongodb://mongo:27017/" \
+# Points to MongoDB on host machine by default
+ENV COSMIKAI_MONGO_URI="mongodb://host.docker.internal:27017/" \
     COSMIKAI_MONGO_DB="exoplanet_DB" \
     COSMIKAI_MONGO_COLLECTION="predictions"
 

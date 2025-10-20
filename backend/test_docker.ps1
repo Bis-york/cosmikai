@@ -12,6 +12,17 @@ if (!(Test-Path "Dockerfile") -or !(Test-Path "server_setup.py")) {
 Write-Host "✓ Found required files (Dockerfile, server_setup.py)" -ForegroundColor Green
 Write-Host ""
 
+# Test MongoDB connection
+Write-Host "🔌 Testing MongoDB connection..." -ForegroundColor Yellow
+python test_mongodb.py
+if ($LASTEXITCODE -ne 0) {
+    Write-Host ""
+    Write-Host "⚠️  MongoDB test failed. Docker will still build, but may not start properly." -ForegroundColor Yellow
+    Write-Host "   Make sure MongoDB is running before using docker-compose up" -ForegroundColor Yellow
+    Write-Host ""
+}
+Write-Host ""
+
 # Test: Build the Docker image
 Write-Host "📦 Building Docker image..." -ForegroundColor Yellow
 try {
