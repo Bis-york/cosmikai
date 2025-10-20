@@ -1,4 +1,4 @@
-FROM python:3.11-bookworm AS base
+FROM python:3.11-slim-bookworm
 
 # Install system packages required for scientific Python stack.
 RUN apt-get update \
@@ -8,33 +8,31 @@ RUN apt-get update \
         git \
     && rm -rf /var/lib/apt/lists/*
 
+# Set working directory
 WORKDIR /app
 
-# Copy requirement files separately for better caching.
-COPY requirements.txt /app/requirements.txt
+# Copy requirements first for better layer caching
+COPY requirements.txt .
 
+# Install Python dependencies
 RUN pip install --upgrade pip \
-    && pip install --no-cache-dir -r /app/requirements.txt
+    && pip install --no-cache-dir -r requirements.txt
 
-# Copy backend packaging metadata separately for build caching.
-COPY pyproject.toml setup.cfg /app/
+# Copy all backend source code
+COPY . backend/
 
-# Copy backend source code and server entrypoint.
-COPY . /app
-COPY server_setup.py /app/server_setup.py
+# Create empty __init__.py in parent to make backend a proper package
+RUN touch /app/__init__.py
 
-# Install the backend package in editable mode so imports resolve cleanly.
-RUN pip install --no-cache-dir -e /app
+# Set Python path so backend can be imported as a package
+ENV PYTHONPATH="/app"
 
-# Ensure the application package is on Python's module search path.
-ENV PYTHONPATH="/app:/app/"
-
-# Default environment configuration; can be overridden at runtime.
+# Default environment configuration; can be overridden at runtime
 ENV COSMIKAI_MONGO_URI="mongodb://mongo:27017/" \
     COSMIKAI_MONGO_DB="exoplanet_DB" \
     COSMIKAI_MONGO_COLLECTION="predictions"
 
 EXPOSE 8000
 
-# Run the API server via the helper that waits for MongoDB.
-CMD ["python", "server_setup.py", "--host", "0.0.0.0", "--port", "8000"]
+# Run the API server via the helper that waits for MongoDB
+CMD ["python", "backend/server_setup.py", "--host", "0.0.0.0", "--port", "8000"]
