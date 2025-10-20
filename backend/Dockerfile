@@ -20,6 +20,9 @@ RUN pip install --upgrade pip \
 COPY backend /app/backend
 COPY server_setup.py /app/server_setup.py
 
+# Ensure the application package is on Python's module search path.
+ENV PYTHONPATH="/app"
+
 # Default environment configuration; can be overridden at runtime.
 ENV COSMIKAI_MONGO_URI="mongodb://mongo:27017/" \
     COSMIKAI_MONGO_DB="exoplanet_DB" \
