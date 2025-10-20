@@ -1,0 +1,6 @@
+Metadata-Version: 2.4
+Name: cosmikai-backend
+Version: 0.1.0
+Summary: CosmiKai backend application package
+License: MIT
+Requires-Python: >=3.9

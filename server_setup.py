@@ -18,6 +18,12 @@ NEWMONGO_PATH = BACKEND_DIR / "newMongo.py"
 if not NEWMONGO_PATH.exists():
     raise FileNotFoundError(f"Expected backend module at {NEWMONGO_PATH} but it was not found.")
 
+# Ensure project directories are on sys.path for downstream imports (e.g. backend.newmain in uvicorn).
+for candidate in (PROJECT_ROOT, BACKEND_DIR):
+    path_str = str(candidate)
+    if path_str not in sys.path:
+        sys.path.insert(0, path_str)
+
 def _load_backend_newmongo() -> ModuleType:
     """
     Load backend.newMongo directly from its file path.

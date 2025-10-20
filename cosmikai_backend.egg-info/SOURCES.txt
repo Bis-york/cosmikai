@@ -1,0 +1,13 @@
+README.md
+pyproject.toml
+setup.cfg
+backend/__init__.py
+backend/api.py
+backend/data_analyzer.py
+backend/newMongo.py
+backend/newmain.py
+backend/predict.py
+cosmikai_backend.egg-info/PKG-INFO
+cosmikai_backend.egg-info/SOURCES.txt
+cosmikai_backend.egg-info/dependency_links.txt
+cosmikai_backend.egg-info/top_level.txt
