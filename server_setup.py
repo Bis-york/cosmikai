@@ -4,44 +4,49 @@ from __future__ import annotations
 import argparse
 import sys
 import time
+from importlib import util as importlib_util
+from types import ModuleType
 from pathlib import Path
 from typing import Any, Dict
 
 import uvicorn
 
-def _import_backend() -> tuple:
+PROJECT_ROOT = Path(__file__).resolve().parent
+BACKEND_DIR = PROJECT_ROOT / "backend"
+NEWMONGO_PATH = BACKEND_DIR / "newMongo.py"
+
+if not NEWMONGO_PATH.exists():
+    raise FileNotFoundError(f"Expected backend module at {NEWMONGO_PATH} but it was not found.")
+
+def _load_backend_newmongo() -> ModuleType:
     """
-    Import the backend Mongo helpers.
+    Load backend.newMongo directly from its file path.
 
-    Some Docker contexts fail to include the repository root on PYTHONPATH,
-    so we defensively add both the project root and the backend directory
-    before importing.
+    This bypasses Python's normal import resolution, so the module is available
+    even if PYTHONPATH is misconfigured inside the container.
     """
-    try:
-        from backend.newMongo import database_status, mongo_config  # type: ignore
-        return database_status, mongo_config
-    except ModuleNotFoundError as first_error:
-        project_root = Path(__file__).resolve().parent
-        backend_dir = project_root / "backend"
-        for candidate in (project_root, backend_dir):
-            path_str = str(candidate)
-            if path_str not in sys.path:
-                sys.path.insert(0, path_str)
-        try:
-            from backend.newMongo import database_status, mongo_config  # type: ignore
-            return database_status, mongo_config
-        except ModuleNotFoundError:
-            if backend_dir.exists():
-                # Fallback to direct module import (no package prefix) by exposing backend dir first.
-                if str(backend_dir) not in sys.path:
-                    sys.path.insert(0, str(backend_dir))
-                import newMongo  # type: ignore
+    package_name = "backend"
+    module_name = f"{package_name}.newMongo"
 
-                return newMongo.database_status, newMongo.mongo_config  # type: ignore
-            raise first_error
+    # Ensure the package placeholder exists so attribute resolution works.
+    if package_name not in sys.modules:
+        package = ModuleType(package_name)
+        package.__path__ = [str(BACKEND_DIR)]  # type: ignore[attr-defined]
+        sys.modules[package_name] = package
+
+    spec = importlib_util.spec_from_file_location(module_name, NEWMONGO_PATH)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Unable to load spec for {module_name} from {NEWMONGO_PATH}")
+
+    module = importlib_util.module_from_spec(spec)
+    spec.loader.exec_module(module)  # type: ignore[arg-type]
+    sys.modules[module_name] = module
+    return module
 
 
-database_status, mongo_config = _import_backend()
+newmongo_module = _load_backend_newmongo()
+database_status = newmongo_module.database_status  # type: ignore[attr-defined]
+mongo_config = newmongo_module.mongo_config  # type: ignore[attr-defined]
 
 
 def wait_for_mongo(timeout: float, interval: float) -> Dict[str, Any]:
