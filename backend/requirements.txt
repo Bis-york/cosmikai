@@ -1,0 +1,12 @@
+numpy
+pandas
+torch
+scikit-learn
+astropy
+lightkurve[oktopus]
+batman-package
+fastapi
+pydantic
+uvicorn
+pytest
+pymongo
