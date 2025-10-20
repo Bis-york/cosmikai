@@ -9,14 +9,39 @@ from typing import Any, Dict
 
 import uvicorn
 
-# Ensure the local project directory is available on sys.path when running in Docker.
-PROJECT_ROOT = Path(__file__).resolve().parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-if str(PROJECT_ROOT / "backend") not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT / "backend"))
+def _import_backend() -> tuple:
+    """
+    Import the backend Mongo helpers.
 
-from backend.newMongo import database_status, mongo_config
+    Some Docker contexts fail to include the repository root on PYTHONPATH,
+    so we defensively add both the project root and the backend directory
+    before importing.
+    """
+    try:
+        from backend.newMongo import database_status, mongo_config  # type: ignore
+        return database_status, mongo_config
+    except ModuleNotFoundError as first_error:
+        project_root = Path(__file__).resolve().parent
+        backend_dir = project_root / "backend"
+        for candidate in (project_root, backend_dir):
+            path_str = str(candidate)
+            if path_str not in sys.path:
+                sys.path.insert(0, path_str)
+        try:
+            from backend.newMongo import database_status, mongo_config  # type: ignore
+            return database_status, mongo_config
+        except ModuleNotFoundError:
+            if backend_dir.exists():
+                # Fallback to direct module import (no package prefix) by exposing backend dir first.
+                if str(backend_dir) not in sys.path:
+                    sys.path.insert(0, str(backend_dir))
+                import newMongo  # type: ignore
+
+                return newMongo.database_status, newMongo.mongo_config  # type: ignore
+            raise first_error
+
+
+database_status, mongo_config = _import_backend()
 
 
 def wait_for_mongo(timeout: float, interval: float) -> Dict[str, Any]:
