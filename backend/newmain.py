@@ -7,15 +7,15 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, validator
 
-from backend.data_analyzer import process_json_input as run_data_analyzer
-from backend.newMongo import (
+from .data_analyzer import process_json_input as run_data_analyzer
+from .newMongo import (
     database_status,
     get_cached_result,
     list_cached_targets,
     prediction_stats,
     save_result,
 )
-from backend.predict import process_json_input as run_lightcurve
+from .predict import process_json_input as run_lightcurve
 
 def _resolve_allowed_origins() -> list[str] | None:
     env_value = os.getenv("COSMIKAI_CORS_ORIGINS")

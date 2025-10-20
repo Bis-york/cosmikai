@@ -13,7 +13,7 @@ import logging
 import numpy as np
 
 
-from backend.data_analyzer import (
+from .data_analyzer import (
     DEFAULT_CHECKPOINT,
     DEFAULT_CONFIDENCE_THRESHOLD,
     ModelBundle,
