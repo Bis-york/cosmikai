@@ -19,20 +19,29 @@ if not NEWMONGO_PATH.exists():
     raise FileNotFoundError(f"Expected backend module at {NEWMONGO_PATH} but it was not found.")
 
 # Ensure project directories are on sys.path for downstream imports (e.g. backend.newmain in uvicorn).
-for candidate in (PROJECT_ROOT, BACKEND_DIR):
+for candidate in (PROJECT_ROOT,):
     path_str = str(candidate)
     if path_str not in sys.path:
         sys.path.insert(0, path_str)
 
-def _load_backend_newmongo() -> ModuleType:
+# Also ensure backend dir is NOT in sys.path (should be accessed via backend.module)
+backend_str = str(BACKEND_DIR)
+while backend_str in sys.path:
+    sys.path.remove(backend_str)
+
+def _load_backend_module(module_file: str) -> ModuleType:
     """
-    Load backend.newMongo directly from its file path.
+    Load a backend module directly from its file path.
 
     This bypasses Python's normal import resolution, so the module is available
     even if PYTHONPATH is misconfigured inside the container.
     """
     package_name = "backend"
-    module_name = f"{package_name}.newMongo"
+    module_name = f"{package_name}.{module_file}"
+    module_path = BACKEND_DIR / f"{module_file}.py"
+
+    if not module_path.exists():
+        raise FileNotFoundError(f"Expected module at {module_path}")
 
     # Ensure the package placeholder exists so attribute resolution works.
     if package_name not in sys.modules:
@@ -40,17 +49,21 @@ def _load_backend_newmongo() -> ModuleType:
         package.__path__ = [str(BACKEND_DIR)]  # type: ignore[attr-defined]
         sys.modules[package_name] = package
 
-    spec = importlib_util.spec_from_file_location(module_name, NEWMONGO_PATH)
+    spec = importlib_util.spec_from_file_location(module_name, module_path)
     if spec is None or spec.loader is None:
-        raise ImportError(f"Unable to load spec for {module_name} from {NEWMONGO_PATH}")
+        raise ImportError(f"Unable to load spec for {module_name} from {module_path}")
 
     module = importlib_util.module_from_spec(spec)
-    spec.loader.exec_module(module)  # type: ignore[arg-type]
     sys.modules[module_name] = module
+    spec.loader.exec_module(module)  # type: ignore[arg-type]
     return module
 
 
-newmongo_module = _load_backend_newmongo()
+# Pre-load all backend modules in dependency order to support relative imports
+_load_backend_module("data_analyzer")
+_load_backend_module("predict")
+newmongo_module = _load_backend_module("newMongo")
+_load_backend_module("newmain")
 database_status = newmongo_module.database_status  # type: ignore[attr-defined]
 mongo_config = newmongo_module.mongo_config  # type: ignore[attr-defined]
 
