@@ -11,10 +11,13 @@ RUN apt-get update \
 WORKDIR /app
 
 # Copy requirement files separately for better caching.
-COPY ../requirements.txt /app/requirements.txt
+COPY requirements.txt /app/requirements.txt
 
 RUN pip install --upgrade pip \
     && pip install --no-cache-dir -r /app/requirements.txt
+
+# Add /app to PYTHONPATH to ensure modules are found.
+ENV PYTHONPATH="${PYTHONPATH}:/app"
 
 # Copy backend source code and server entrypoint.
 COPY backend/ /app/backend/
@@ -28,4 +31,4 @@ ENV COSMIKAI_MONGO_URI="mongodb://mongo:27017/" \
 EXPOSE 8000
 
 # Run the API server via the helper that waits for MongoDB.
-CMD ["python", "server_setup.py", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "/app/server_setup.py", "--host", "0.0.0.0", "--port", "8000"]
