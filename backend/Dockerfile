@@ -16,11 +16,8 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --upgrade pip \
     && pip install --no-cache-dir -r /app/requirements.txt
 
-# Add /app to PYTHONPATH to ensure modules are found.
-ENV PYTHONPATH="${PYTHONPATH}:/app"
-
 # Copy backend source code and server entrypoint.
-COPY backend/ /app/backend/
+COPY backend/ /app/
 COPY server_setup.py /app/
 
 # Default environment configuration; can be overridden at runtime.
