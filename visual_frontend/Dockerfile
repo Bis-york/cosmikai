@@ -4,6 +4,7 @@ WORKDIR /app
 
 COPY package*.json ./
 RUN npm install
+RUN chmod -R +x /app/node_modules/.bin/
 
 COPY . .
 
