@@ -31,8 +31,10 @@ def _resolve_allowed_origins() -> list[str] | None:
             "http://127.0.0.1:5280",
             "https://api.flyingwaffle.ca",
             "https://visuals.flyingwaffle.ca",
+            "https://cosmikai.flyingwaffle.ca",
             "http://api.flyingwaffle.ca",
             "http://visuals.flyingwaffle.ca",
+            "http://cosmikai.flyingwaffle.ca",
         ]
     origins = [origin.strip() for origin in env_value.split(",") if origin.strip()]
     return origins or None
