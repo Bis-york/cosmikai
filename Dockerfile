@@ -25,9 +25,9 @@ COPY server_setup.py ./server_setup.py
 
 WORKDIR /app/backend
 COPY /backend .
-ARG BASE_API_URL=http://cosmikai-backend:8000
-ARG BASE_VISUAL_URL=http://cosmikai-visual-frontend:5173
-ARG VISUAL_API_URL=http://cosmikai-backend:8000
+ARG BASE_API_URL=https://api.flyingwaffle.ca
+ARG BASE_VISUAL_URL=https://visuals.flyingwaffle.ca
+ARG VISUAL_API_URL=https://api.flyingwaffle.ca
 
 WORKDIR /app
 WORKDIR /app/base_frontend
