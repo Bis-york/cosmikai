@@ -40,7 +40,10 @@ def _resolve_allowed_origins() -> list[str] | None:
 
 app = FastAPI(title="CosmiKai Prediction Gateway")
 
-allowed_origins = _resolve_allowed_origins() or ["*"]
+allowed_origins = _resolve_allowed_origins()
+if not allowed_origins:
+    allowed_origins = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
