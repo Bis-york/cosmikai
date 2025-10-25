@@ -21,13 +21,15 @@ COPY requirements.txt .
 RUN pip install --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
-COPY backend ./backend
 COPY server_setup.py ./server_setup.py
 
+WORKDIR /app/backend
+COPY /backend .
 ARG BASE_API_URL=api.flyingwaffle.ca
 ARG BASE_VISUAL_URL=visuals.flyingwaffle.ca
 ARG VISUAL_API_URL=api.flyingwaffle.ca
 
+WORKDIR /app
 WORKDIR /app/base_frontend
 COPY base_frontend/package*.json ./
 RUN npm install

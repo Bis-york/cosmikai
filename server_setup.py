@@ -8,7 +8,7 @@ from typing import Any, Dict
 
 import uvicorn
 
-from newMongo import database_status, mongo_config
+from backend.newMongo import database_status, mongo_config
 
 
 def wait_for_mongo(timeout: float, interval: float) -> Dict[str, Any]:

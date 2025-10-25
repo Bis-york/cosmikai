@@ -17,7 +17,7 @@ RUN pip install --upgrade pip \
     && pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy backend source code and server entrypoint.
-COPY backend/ /app/
+COPY backend/ /app/backend/
 COPY server_setup.py /app/
 
 # Default environment configuration; can be overridden at runtime.
