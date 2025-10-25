@@ -18,7 +18,7 @@ RUN pip install --upgrade pip \
 
 # Copy backend source code and server entrypoint.
 COPY backend/ /app/backend/
-COPY server_setup.py /app/
+COPY server_setup.py /app/backend/server_setup.py
 
 # Default environment configuration; can be overridden at runtime.
 ENV COSMIKAI_MONGO_URI="mongodb://mongo:27017/" \
