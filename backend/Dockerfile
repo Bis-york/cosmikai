@@ -18,7 +18,7 @@ RUN pip install --upgrade pip \
 
 # Copy backend source code and server entrypoint.
 COPY backend/ /app/backend/
-COPY server_setup.py /app/backend/server_setup.py
+COPY server_setup.py /app/
 
 # Default environment configuration; can be overridden at runtime.
 ENV COSMIKAI_MONGO_URI="mongodb://mongo:27017/" \
@@ -28,4 +28,4 @@ ENV COSMIKAI_MONGO_URI="mongodb://mongo:27017/" \
 EXPOSE 8000
 
 # Run the API server via the helper that waits for MongoDB.
-CMD ["python", "/app/server_setup.py", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "server_setup.py", "--host", "0.0.0.0", "--port", "8000"]
