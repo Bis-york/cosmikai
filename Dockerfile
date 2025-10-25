@@ -25,17 +25,17 @@ COPY server_setup.py ./server_setup.py
 
 WORKDIR /app/backend
 COPY /backend .
-ARG BASE_API_URL=api.flyingwaffle.ca
-ARG BASE_VISUAL_URL=visuals.flyingwaffle.ca
-ARG VISUAL_API_URL=api.flyingwaffle.ca
+ARG BASE_API_URL=http://cosmikai-backend:8000
+ARG BASE_VISUAL_URL=http://cosmikai-visual-frontend:5173
+ARG VISUAL_API_URL=http://cosmikai-backend:8000
 
 WORKDIR /app
 WORKDIR /app/base_frontend
 COPY base_frontend/package*.json ./
 RUN npm install
 COPY base_frontend/ .
-RUN VITE_API_BASE_URL=${BASE_API_URL} \
-    VITE_VISUAL_BASE_URL=${BASE_VISUAL_URL} \
+RUN VITE_API_BASE_URL=${BASE_API_URL:-http://cosmikai-backend:8000} \
+    VITE_VISUAL_BASE_URL=${BASE_VISUAL_URL:-http://cosmikai-visual-frontend:5173} \
     npm run build \
     && rm -rf node_modules
 
@@ -43,7 +43,7 @@ WORKDIR /app/visual_frontend
 COPY visual_frontend/package*.json ./
 RUN npm install
 COPY visual_frontend/ .
-RUN VITE_API_BASE_URL=${VISUAL_API_URL} \
+RUN VITE_API_BASE_URL=${VISUAL_API_URL:-http://cosmikai-backend:8000} \
     npm run build \
     && rm -rf node_modules
 
