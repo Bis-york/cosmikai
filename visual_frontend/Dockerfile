@@ -4,9 +4,10 @@ WORKDIR /app
 
 COPY package*.json ./
 RUN npm install
-RUN chmod -R +x /app/node_modules/.bin/
 
 COPY . .
+
+RUN chmod -R +x /app/node_modules/.bin/
 
 EXPOSE 5173
 
