@@ -16,7 +16,7 @@ export default defineConfig(() => {
   const allowedHosts = resolveAllowedHosts() ?? ['visuals.flyingwaffle.ca']
   const sharedServerConfig = {
     host: true,
-    port: 5280,
+    port: 5173,
     allowedHosts,
   }
   return {
