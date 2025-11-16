@@ -51,7 +51,7 @@ WORKDIR /app
 
 COPY docker/supervisord.conf /etc/supervisor/conf.d/cosmikai.conf
 
-ENV COSMIKAI_MONGO_URI=mongodb://localhost:27017/ \
+ENV COSMIKAI_MONGO_URI=mongo.flyingwaffle.ca \
     COSMIKAI_MONGO_DB=exoplanet_DB \
     COSMIKAI_MONGO_COLLECTION=predictions
 
