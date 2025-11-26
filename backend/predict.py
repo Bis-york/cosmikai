@@ -5,6 +5,8 @@ import argparse
 import json
 import sys
 from dataclasses import dataclass
+import csv
+import requests
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence, Tuple, Union, List
@@ -49,10 +51,106 @@ def _load_model(checkpoint: str, device: Optional[str]) -> ModelBundle:
     checkpoint_path = Path(checkpoint)
     return load_detector(checkpoint_path, device=device)
 
+def _normalize_star_name(name: str) -> str:
+    return str(name or "").strip().lower()
+
+def _try_local_kepler_catalog(name: str) -> Optional[str]:
+    """Return a best-effort identifier from local Kepler CSVs.
+
+    Prefers returning a KIC identifier string like "KIC 11442793" if found.
+    """
+    normalized = _normalize_star_name(name)
+    candidate_files = [
+        Path("data_test/kepler_cumulative.csv"),
+        Path("model code/data/kepler_cumulative.csv"),
+        Path("model code/data/kepler_cumulative.csv"),
+    ]
+    for fpath in candidate_files:
+        if fpath.exists():
+            try:
+                with fpath.open("r", newline="", encoding="utf-8") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        # Columns vary by dataset; try a few common ones
+                        kepler_name = (row.get("kepler_name") or row.get("kepoi_name") or row.get("koi_name") or "").strip()
+                        kepid = (row.get("kepid") or row.get("kic_kepler_id") or "").strip()
+                        if kepler_name and _normalize_star_name(kepler_name) == normalized and kepid:
+                            return f"KIC {int(float(kepid))}"
+            except Exception as e:
+                logger.debug("Local Kepler catalog read failed from %s: %s", fpath, e)
+    return None
+
+def _try_exoplanet_archive(name: str) -> Optional[str]:
+    """Query NASA Exoplanet Archive over HTTPS to resolve to KIC/TIC.
+
+    Returns a string identifier like "KIC 11442793" or "TIC 123456789" if found.
+    """
+    try:
+        url = "https://exoplanetarchive.ipac.caltech.edu/TAP/sync"
+        n = _normalize_star_name(name).replace("'", "")
+        # Try both Kepler name and host/star name
+        query = (
+            "select top 1 kepler_name, kepid, hostname, sy_ticid "
+            "from pscomppars "
+            f"where lower(kepler_name)='{n}' or lower(hostname)='{n}'"
+        )
+        params = {"query": query, "format": "json"}
+        resp = requests.get(url, params=params, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+        if isinstance(data, list) and data:
+            row = data[0]
+            kepid = row.get("kepid")
+            ticid = row.get("sy_ticid")
+            if kepid:
+                return f"KIC {int(kepid)}"
+            if ticid:
+                # sy_ticid may be float or string
+                try:
+                    return f"TIC {int(float(ticid))}"
+                except Exception:
+                    return f"TIC {ticid}"
+    except Exception as e:
+        logger.debug("Exoplanet Archive lookup failed: %s", e)
+    return None
+
+def _resolve_target_identifier(name: str) -> str:
+    """Resolve a user-provided star name to a numeric catalog ID if possible.
+
+    This avoids the MAST HTTP name resolver (port 80) which may be blocked.
+    Resolution order:
+      1) If name already looks like KIC/TIC or is numeric, return as-is
+      2) Local Kepler CSV lookup
+      3) NASA Exoplanet Archive (HTTPS) lookup
+      4) Fallback to original name
+    """
+    raw = str(name).strip()
+    low = raw.lower()
+    if low.startswith("kic ") or low.startswith("tic "):
+        return raw
+    if low.isdigit():
+        # Assume KIC if plain digits (Kepler) — better than failing outright
+        return f"KIC {raw}"
+
+    ident = _try_local_kepler_catalog(raw)
+    if ident:
+        logger.info("Resolved '%s' via local catalog to '%s'", raw, ident)
+        return ident
+
+    ident = _try_exoplanet_archive(raw)
+    if ident:
+        logger.info("Resolved '%s' via Exoplanet Archive to '%s'", raw, ident)
+        return ident
+
+    logger.info("Using provided target name without resolution: '%s'", raw)
+    return raw
+
 def _get_clean_light_curve(config: TargetConfig) -> Any:
     """Downloads and returns the LightCurve object (not just numpy arrays)."""
     _ensure_lightkurve()
-    search = lk.search_lightcurve(config.target, mission=config.mission)
+    # Resolve to an ID when possible to bypass MAST's HTTP name resolver
+    resolved = _resolve_target_identifier(config.target)
+    search = lk.search_lightcurve(resolved, mission=config.mission)
     
     if search is None or len(search) == 0:
         raise ValueError(f"No light curve found for {config.target} ({config.mission}).")

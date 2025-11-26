@@ -10,3 +10,4 @@ pydantic
 uvicorn
 pytest
 pymongo
+requests
