@@ -117,27 +117,22 @@ def load_detector(
 
 
 def _coerce_float(value: Any) -> Optional[float]:
-    if value is None:
+    """Convert value to float, returning None for invalid/empty values."""
+    if value is None or (isinstance(value, str) and not value.strip()):
         return None
-    if isinstance(value, str):
-        value = value.strip()
-        if value == "":
-            return None
     try:
-        number = float(value)
+        num = float(value)
+        return None if np.isnan(num) else num
     except (TypeError, ValueError):
         return None
-    if np.isnan(number):
-        return None
-    return number
 
 
 def _normalize_flux_curve(flux: Union[np.ndarray, Sequence[float]]) -> np.ndarray:
+    """Normalize flux curve to zero mean and unit variance."""
     curve = np.asarray(flux, dtype=np.float32)
     curve -= np.nanmedian(curve)
     curve /= np.nanstd(curve) + 1e-6
-    np.nan_to_num(curve, nan=0.0, copy=False)
-    return curve
+    return np.nan_to_num(curve, nan=0.0)
 
 
 def load_parameter_row(
@@ -223,16 +218,18 @@ def _prepare_transit_inputs(raw: Dict[str, Any]) -> Dict[str, Any]:
             "score": score,
         }
 
+    # Extract period
     period = None
     period_source = None
     for key in ("koi_period", "period", "period_days"):
-        value = _coerce_float(raw.get(key))
-        if value is not None and value > 0:
-            period = value
-            period_source = key
-            break
-    if period is None or period <= 0:
+        if value := _coerce_float(raw.get(key)):
+            if value > 0:
+                period, period_source = value, key
+                break
+    
+    if not period or period <= 0:
         raise ValueError("Missing or invalid period in parameter CSV entry.")
+    
     period_quality = _estimate_quality(period_source or "koi_period", period)
     _score("koi_period", True, period_quality)
 
@@ -269,7 +266,8 @@ def _prepare_transit_inputs(raw: Dict[str, Any]) -> Dict[str, Any]:
 
     impact_value = _coerce_float(raw.get("koi_impact") or raw.get("impact_parameter"))
     impact_provided = impact_value is not None
-    impact = float(np.clip(impact_value if impact_value is not None else 0.0, 0.0, max(scaled_a - 1e-3, 0.0)))
+    max_impact = max(scaled_a - 1e-3, 0.0)
+    impact = float(np.clip(impact_value if impact_provided else 0.0, 0.0, max_impact))
     impact_quality = _estimate_quality("koi_impact", impact_value) if impact_provided else 0.0
     _score("koi_impact", impact_provided, impact_quality)
 
@@ -307,30 +305,22 @@ def _prepare_transit_inputs(raw: Dict[str, Any]) -> Dict[str, Any]:
     _score("koi_limbdark", limb_dark_provided, 1.0)
 
     ror_value = _coerce_float(raw.get("koi_ror"))
-    depth_key = "koi_ror" if ror_value is not None and ror_value > 0 else "koi_depth"
-    if ror_value is not None and ror_value > 0:
-        rp = float(max(ror_value, 1e-3))
+    
+    if ror_value and ror_value > 0:
+        rp = max(ror_value, 1e-3)
         depth = rp ** 2
         depth_provided = True
         depth_quality = _estimate_quality("koi_ror", ror_value)
     else:
         depth_raw = _coerce_float(raw.get("koi_depth"))
         if depth_raw is None:
-            depth = 1e-4
-            depth_provided = False
-            depth_quality = 0.0
+            depth, depth_provided, depth_quality = 1e-4, False, 0.0
         else:
-            depth = depth_raw if depth_raw < 1 else depth_raw * 1e-6
+            depth = (depth_raw if depth_raw < 1 else depth_raw * 1e-6)
             depth = max(depth, 1e-6)
-            rp = math.sqrt(depth)
-            rp = max(rp, 1e-3)
-            depth_provided = True
-            depth_quality = _estimate_quality("koi_depth", depth_raw)
-    if ror_value is not None and ror_value > 0:
-        rp = max(ror_value, 1e-3)
-        depth = max(rp ** 2, 1e-6)
-    else:
+            depth_provided, depth_quality = True, _estimate_quality("koi_depth", depth_raw)
         rp = max(math.sqrt(depth), 1e-3)
+    
     _score("koi_depth", depth_provided, depth_quality)
 
     if impact >= scaled_a:
@@ -494,9 +484,8 @@ def _json_ready(value: Any) -> Any:
 # Utility helpers to normalize optional values when building JSON outputs.
 
 def _coerce_optional_float(value: Any) -> Optional[float]:
-    if value is None:
-        return None
-    if isinstance(value, (bool, str)) and value == "":
+    """Convert to float, returning None for invalid values."""
+    if value is None or value == "":
         return None
     try:
         return float(value)
@@ -505,28 +494,23 @@ def _coerce_optional_float(value: Any) -> Optional[float]:
 
 
 def _coerce_optional_int(value: Any) -> Optional[int]:
-    if value is None:
-        return None
-    if isinstance(value, (bool, str)) and value == "":
+    """Convert to int, returning None for invalid values."""
+    if value is None or value == "":
         return None
     try:
-        return int(value)
+        return int(float(value))
     except (TypeError, ValueError):
-        try:
-            return int(float(value))
-        except (TypeError, ValueError):
-            return None
+        return None
 
 
 def _coerce_optional_bool(value: Any) -> Optional[bool]:
+    """Convert to bool, returning None for invalid values."""
     if value is None:
         return None
     if isinstance(value, (np.bool_, bool)):
         return bool(value)
-    if isinstance(value, (int, np.integer)):
-        return bool(int(value))
-    if isinstance(value, (float, np.floating)):
-        return bool(float(value))
+    if isinstance(value, (int, float, np.integer, np.floating)):
+        return bool(value)
     if isinstance(value, str):
         normalized = value.strip().lower()
         if normalized in {"true", "1", "yes", "y", "t"}:
@@ -1315,7 +1299,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
 
 if __name__ == "__main__":  # pragma: no cover
-    raise SystemExit(main())  # pragma: no cover
     raise SystemExit(main())
 
 

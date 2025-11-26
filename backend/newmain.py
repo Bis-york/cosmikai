@@ -17,66 +17,52 @@ from backend.newMongo import (
 )
 from backend.predict import process_json_input as run_lightcurve
 
-def _resolve_allowed_origins() -> list[str] | None:
+# Default CORS origins for local development and production
+DEFAULT_ORIGINS = [
+    "http://localhost:5173", "http://127.0.0.1:5173",
+    "http://localhost:4173", "http://127.0.0.1:4173",
+    "http://localhost:5180", "http://127.0.0.1:5180",
+    "http://localhost:5280", "http://127.0.0.1:5280",
+    "https://api.flyingwaffle.ca", "http://api.flyingwaffle.ca",
+    "https://visuals.flyingwaffle.ca", "http://visuals.flyingwaffle.ca",
+    "https://cosmikai.flyingwaffle.ca", "http://cosmikai.flyingwaffle.ca",
+]
+
+def _resolve_allowed_origins() -> list[str]:
     env_value = os.getenv("COSMIKAI_CORS_ORIGINS")
-    if not env_value:
-        return [
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-            "http://localhost:4173",
-            "http://127.0.0.1:4173",
-            "http://localhost:5180",
-            "http://127.0.0.1:5180",
-            "http://localhost:5280",
-            "http://127.0.0.1:5280",
-            "https://api.flyingwaffle.ca",
-            "https://visuals.flyingwaffle.ca",
-            "https://cosmikai.flyingwaffle.ca",
-            "http://api.flyingwaffle.ca",
-            "http://visuals.flyingwaffle.ca",
-            "http://cosmikai.flyingwaffle.ca",
-        ]
-    origins = [origin.strip() for origin in env_value.split(",") if origin.strip()]
-    return origins or None
+    if env_value:
+        origins = [origin.strip() for origin in env_value.split(",") if origin.strip()]
+        return origins if origins else ["*"]
+    return DEFAULT_ORIGINS
 
 
 app = FastAPI(title="CosmiKai Prediction Gateway")
 
-allowed_origins = _resolve_allowed_origins()
-if not allowed_origins:
-    allowed_origins = ["*"]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=_resolve_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-_TargetKeys = ("target", "target_name", "star_id", "object_id")
+TARGET_KEYS = ("target", "target_name", "star_id", "object_id")
 
 
 def _extract_target(config: Dict[str, Any]) -> str:
-    for key in _TargetKeys:
-        if key not in config:
-            continue
-        raw_value = config[key]
-        if raw_value is None:
-            continue
-        if isinstance(raw_value, str):
-            candidate = raw_value.strip()
-            if candidate:
-                return candidate
-        else:
-            candidate = str(raw_value).strip()
+    """Extract and validate target identifier from config."""
+    for key in TARGET_KEYS:
+        value = config.get(key)
+        if value:
+            candidate = str(value).strip()
             if candidate:
                 return candidate
     raise HTTPException(status_code=400, detail="Configuration must include a target identifier (e.g. 'target_name').")
 
 
 def _coerce_config(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Transform prediction payload into frontend-compatible format."""
     results = payload.get("results")
     if not isinstance(results, list) or not results:
         raise ValueError("Result payload did not contain any target entries.")
@@ -85,19 +71,24 @@ def _coerce_config(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     for entry in results:
         if not isinstance(entry, dict):
             continue
+        
         target = str(entry.get("target", "unknown")).strip() or "unknown"
         detail = {k: v for k, v in entry.items() if k != "target"}
-        if "original_target" not in detail and payload.get("original_target"):
-            detail["original_target"] = payload.get("original_target")
-        if payload.get("timestamp") and "cached_timestamp" not in detail:
-            detail["cached_timestamp"] = payload.get("timestamp")
-        if payload.get("target_aliases"):
-            detail.setdefault("target_aliases", payload.get("target_aliases"))
-        if payload.get("checkpoint"):
-            detail.setdefault("checkpoint_path", payload.get("checkpoint"))
-        if payload.get("device"):
-            detail.setdefault("device", payload.get("device"))
+        
+        # Add metadata from payload if not already present
+        metadata_mappings = [
+            ("original_target", "original_target"),
+            ("timestamp", "cached_timestamp"),
+            ("target_aliases", "target_aliases"),
+            ("checkpoint", "checkpoint_path"),
+            ("device", "device"),
+        ]
+        for payload_key, detail_key in metadata_mappings:
+            if payload.get(payload_key) and detail_key not in detail:
+                detail[detail_key] = payload[payload_key]
+        
         formatted[target] = detail
+    
     if not formatted:
         raise ValueError("No valid target entries were found in the results list.")
     return formatted
@@ -126,7 +117,7 @@ class PredictionRequest(BaseModel):
     )
 
     @validator("config", pre=True)
-    def _ensure_dict(cls, value: Any) -> Dict[str, Any]:  # noqa: N805 - pydantic validator signature
+    def _ensure_dict(cls, value: Any) -> Dict[str, Any]:
         if value is None:
             return {}
         if isinstance(value, dict):
@@ -134,22 +125,21 @@ class PredictionRequest(BaseModel):
         raise ValueError("config must be a JSON object")
 
     def resolved_pipeline(self) -> Literal["lightcurve", "data_analyzer"]:
-        if self.pipeline is not None:
+        """Auto-detect pipeline based on config or use explicit override."""
+        if self.pipeline:
             return self.pipeline
-        config_keys = self.config.keys()
-        if any(key in config_keys for key in ("parameter_csv", "csv_path")):
-            return "data_analyzer"
-        return "lightcurve"
+        has_csv = any(key in self.config for key in ("parameter_csv", "csv_path"))
+        return "data_analyzer" if has_csv else "lightcurve"
 
     def common_kwargs(self) -> Dict[str, Any]:
-        kwargs: Dict[str, Any] = {}
-        if self.checkpoint:
-            kwargs["checkpoint_path"] = self.checkpoint
-        if self.device:
-            kwargs["device"] = self.device
-        if self.threshold is not None:
-            kwargs["threshold"] = self.threshold
-        return kwargs
+        """Build kwargs dict for pipeline functions."""
+        return {
+            k: v for k, v in [
+                ("checkpoint_path", self.checkpoint),
+                ("device", self.device),
+                ("threshold", self.threshold),
+            ] if v is not None
+        }
 
 
 @app.get("/db/status")
