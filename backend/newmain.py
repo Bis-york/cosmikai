@@ -172,7 +172,7 @@ async def mongo_stats() -> Dict[str, Any]:
 
 
 @app.post("/predict")
-def predict_star(request: PredictionRequest) -> Dict[str, Dict[str, Any]]:
+async def predict_star(request: PredictionRequest) -> Dict[str, Dict[str, Any]]:
     target_name = _extract_target(request.config)
 
     cached = get_cached_result(target_name)
