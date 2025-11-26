@@ -20,23 +20,18 @@ def mongo_config() -> Tuple[str, str, str]:
     """Return the Mongo connection configuration being used."""
     return MONGO_URI, MONGO_DB, MONGO_COLLECTION
 
-def _legacy_normalize(target: str) -> str:
-    return target.strip().lower()
-
-
 def normalize_target(target: str) -> str:
     """Normalize target names in a consistent, punctuation-free manner."""
-    legacy = _legacy_normalize(target)
+    legacy = target.strip().lower()
     cleaned = re.sub(r"[^a-z0-9]", "", legacy)
     return cleaned or legacy
 
 
 def _candidate_keys(target: str) -> List[str]:
+    """Generate all possible normalized forms of a target name for lookup."""
     normalized = normalize_target(target)
-    legacy = _legacy_normalize(target)
-    if normalized == legacy:
-        return [normalized]
-    return [normalized, legacy]
+    legacy = target.strip().lower()
+    return [normalized] if normalized == legacy else [normalized, legacy]
 
 def get_cached_result(target: str) -> Optional[Dict[str, Any]]:
     """Return cached result if the target already exists."""
@@ -88,30 +83,29 @@ def database_status() -> Dict[str, Any]:
 
 
 def prediction_stats() -> Dict[str, Any]:
-    total = 0
-    planets_found = 0
+    """Calculate aggregate statistics from all cached predictions."""
+    total = planets_found = 0
     sum_confidence = 0.0
 
     for doc in collection.find({}, {"results": 1}):
         total += 1
-        results = doc.get("results") or []
-        first = results[0] if results else {}
+        results = doc.get("results", [])
+        if not results:
+            continue
+        
+        first = results[0]
         try:
-            conf = float(first.get("confidence", 0) or 0)
+            confidence = max(0.0, min(float(first.get("confidence", 0) or 0), 1.0))
         except (TypeError, ValueError):
-            conf = 0.0
-        conf = max(0.0, min(conf, 1.0))
-        sum_confidence += conf
-
+            confidence = 0.0
+        
+        sum_confidence += confidence
         if first.get("has_candidate"):
             planets_found += 1
 
-    accuracy_pct = (sum_confidence / total * 100.0) if total else 0.0
-    false_positives = max(total - planets_found, 0)
-
     return {
-        "accuracy_pct": accuracy_pct,
+        "accuracy_pct": (sum_confidence / total * 100.0) if total else 0.0,
         "total_predictions": total,
         "planets_found": planets_found,
-        "false_positives": false_positives,
+        "false_positives": max(total - planets_found, 0),
     }

@@ -14,17 +14,17 @@ from backend.newMongo import database_status, mongo_config
 def wait_for_mongo(timeout: float, interval: float) -> Dict[str, Any]:
     """Poll the MongoDB instance until it responds or the timeout expires."""
     deadline = time.monotonic() + timeout
-    last_status: Dict[str, Any] | None = None
+    last_status = None
 
     while time.monotonic() < deadline:
         status = database_status()
-        last_status = status
         if status.get("ok"):
             return status
+        last_status = status
         time.sleep(interval)
 
-    error_message = last_status.get("error") if last_status else "unknown error"
-    raise TimeoutError(f"MongoDB did not respond within {timeout:.1f}s: {error_message}")
+    error = last_status.get("error") if last_status else "unknown error"
+    raise TimeoutError(f"MongoDB did not respond within {timeout:.1f}s: {error}")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

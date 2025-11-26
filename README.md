@@ -169,6 +169,50 @@ npm install -g npm@latest                              # optional: front-end too
   - make sure to run a mongodb server
   - Make sure to run some inference on star planets to use the visualizer in stats and to see it in mongodb 
 
+### Docker Compose (all services)
+
+You can spin up MongoDB, the FastAPI backend, and both Vite front-ends with a single command once Docker is installed:
+
+```sh
+docker compose up --build
+```
+
+This builds the service images, launches a MongoDB container with a persistent volume, and exposes the stack on the host:
+
+- Backend API: http://localhost:8000
+- Base frontend workspace: http://localhost:5180
+- Visual analytics frontend: http://localhost:5173
+- MongoDB: mongodb://localhost:27017/
+
+Use `docker compose down` to stop the stack (add `--volumes` to remove the Mongo data volume). Override any default URLs by editing the `environment` section in `docker-compose.yml`.
+
+### Single-container image
+
+If you prefer to keep everything in one container (backend + both frontends), use the root `Dockerfile`:
+
+```sh
+docker build -t cosmikai-all .
+docker run --rm -p 8000:8000 -p 5180:5180 -p 5173:5173 cosmikai-all
+```
+
+The image runs `server_setup.py` for the FastAPI service and serves the pre-built Vite bundles on ports 5180 (base UI) and 5173 (visual UI). Point `COSMIKAI_MONGO_URI` to a reachable MongoDB instance by passing `-e COSMIKAI_MONGO_URI=mongodb://your-mongo-host:27017/` to `docker run`.
+
+Domain-specific URLs are baked into the front-end bundles at build time. Override them by supplying build arguments:
+
+```sh
+docker build \
+  --build-arg BASE_API_URL=https://api.example.com \
+  --build-arg BASE_VISUAL_URL=https://visual.example.com \
+  --build-arg VISUAL_API_URL=https://api.example.com \
+  -t cosmikai-all .
+```
+
+- `BASE_API_URL`: API endpoint consumed by the base web app.
+- `BASE_VISUAL_URL`: URL where the visualizer will be hosted (used for cross-linking).
+- `VISUAL_API_URL`: API endpoint baked into the visualizer.
+
+Rebuild the image whenever you change these values.
+
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

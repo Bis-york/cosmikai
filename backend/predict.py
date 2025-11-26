@@ -102,41 +102,26 @@ def _download_light_curve(config: TargetConfig) -> Tuple[np.ndarray, np.ndarray]
 
 
 def _resolve_config(payload: Dict[str, Any], *, default_threshold: float) -> TargetConfig:
-    possible_target_keys = [
-        "target_name",
-        "target",
-        "star_id",
-        "object_id",
-    ]
-    target_value: Optional[str] = None
-    for key in possible_target_keys:
-        value = payload.get(key)
-        if value is not None:
-            target_value = str(value).strip()
-            if target_value:
-                break
+    """Extract and validate target configuration from JSON payload."""
+    target_keys = ["target_name", "target", "star_id", "object_id"]
+    target_value = next((str(payload.get(k)).strip() for k in target_keys if payload.get(k)), None)
+    
     if not target_value:
         raise ValueError("JSON payload must include a target identifier (e.g. 'target_name').")
-
+    
     mission = str(payload.get("mission", "")).strip()
     if not mission:
         raise ValueError("JSON payload must include a mission field (e.g. 'Kepler' or 'TESS').")
-
-    nbins = payload.get("nbins")
-    nbins_value = int(nbins) if nbins is not None else 512
-    if nbins_value <= 0:
+    
+    nbins = int(payload["nbins"]) if "nbins" in payload else 512
+    if nbins <= 0:
         raise ValueError("nbins must be a positive integer when provided.")
-
+    
     threshold = float(payload.get("threshold", default_threshold))
     if not (0.0 <= threshold <= 1.0):
         raise ValueError("threshold must be between 0 and 1.")
-
-    return TargetConfig(
-        target=target_value,
-        mission=mission,
-        nbins=nbins_value,
-        threshold=threshold,
-    )
+    
+    return TargetConfig(target=target_value, mission=mission, nbins=nbins, threshold=threshold)
 
 
 def score_target(
