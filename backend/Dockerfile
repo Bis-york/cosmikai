@@ -21,7 +21,7 @@ COPY backend/ /app/backend/
 COPY server_setup.py /app/
 
 # Default environment configuration; can be overridden at runtime.
-ENV COSMIKAI_MONGO_URI="mongo.flyingwaffle.ca" \
+ENV COSMIKAI_MONGO_URI="mongodb://localhost:27017/" \
     COSMIKAI_MONGO_DB="exoplanet_DB" \
     COSMIKAI_MONGO_COLLECTION="predictions"
 
