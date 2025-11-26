@@ -172,7 +172,7 @@ async def mongo_stats() -> Dict[str, Any]:
 
 
 @app.post("/predict")
-async def predict_star(request: PredictionRequest) -> Dict[str, Dict[str, Any]]:
+def predict_star(request: PredictionRequest) -> Dict[str, Dict[str, Any]]:
     target_name = _extract_target(request.config)
 
     cached = get_cached_result(target_name)
@@ -186,12 +186,13 @@ async def predict_star(request: PredictionRequest) -> Dict[str, Dict[str, Any]]:
     kwargs = request.common_kwargs()
 
     if pipeline == "lightcurve":
-        raw_result = run_lightcurve(request.config, **kwargs)
+        output = run_lightcurve(request.config, **kwargs)
+        
         wrapped_payload = {
-            "checkpoint": raw_result.get("checkpoint_path"),
-            "device": raw_result.get("device"),
-            "elapsed_seconds": raw_result.get("elapsed_seconds"),
-            "results": [raw_result],
+            "checkpoint": kwargs.get("checkpoint_path"), 
+            "device": kwargs.get("device"),
+            # We assume the first result holds metadata if needed, or extract from output
+            "results": output["results"] 
         }
     else:
         wrapped_payload = run_data_analyzer(request.config, **kwargs)
