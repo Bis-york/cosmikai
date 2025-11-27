@@ -39,82 +39,58 @@ function demo(query: string) {
 async function fetchAnalyze(target: string, apiBase: string): Promise<{ notFound?: boolean; star?: StarMeta; detections: Detection[] }> {
   try {
     const res = await fetch(`${apiBase}/db/stars/${encodeURIComponent(target)}`);
-    if (res.status === 404) {
-      return { notFound: true, detections: [] };
-    }
-    if (!res.ok) {
-      throw new Error(await res.text());
-    }
+    if (res.status === 404) return { notFound: true, detections: [] };
+    if (!res.ok) throw new Error(await res.text());
     const payload = await res.json();
+
+    // New multi-candidate backend shape
+    if (payload && Array.isArray(payload.candidates)) {
+      const starName = payload.star || target;
+      const star: StarMeta = { name: starName };
+      const detections: Detection[] = payload.candidates.map((c: any, i: number) => {
+        const lc = Array.isArray(c.light_curve_points) ? c.light_curve_points : [];
+        const folded = lc.length ? {
+          phase: lc.map((p: any) => Array.isArray(p) ? Number(p[0]) - 0.5 : Number(p.phase) || 0),
+          flux: lc.map((p: any) => Array.isArray(p) ? Number(p[1]) : Number(p.flux) || 1),
+        } : undefined;
+        const flags: [string, string][] = [];
+        const rawProb = Number(c.confidence ?? c.confidence_adjusted ?? 0);
+        return {
+          name: c.candidate_id || `${starName}-cand-${i+1}`,
+          prob: Number.isFinite(rawProb) ? rawProb : 0,
+          period_days: Number(c.period_days ?? 0) || 0,
+          a_rs: Number(c.a_over_r_star ?? 0) || 0,
+          rp_re: Number(c.size_vs_earth ?? 0) || 0,
+          depth: c.transit_depth_fraction,
+          eq_temp_k: c.equilibrium_temperature_k,
+          folded,
+          flags: flags.length ? flags : undefined,
+        } as Detection;
+      });
+      return { star, detections };
+    }
+
+    // Legacy single result mapping
     const [displayTarget, detail] = Object.entries(payload)[0] ?? [target, {}];
-    if (!detail || typeof detail !== 'object') {
-      return { notFound: true, detections: [] };
-    }
-
-    const star: StarMeta = {
-      name: (detail as any).original_target || displayTarget,
-      teff: (detail as any).star_teff_k,
-      mass_sun: (detail as any).star_mass_msun,
-      radius_sun: (detail as any).star_radius_rsun,
-    };
-
-    const lightCurvePoints: any[] | undefined = Array.isArray((detail as any).light_curve_points)
-      ? (detail as any).light_curve_points as any[]
-      : undefined;
-
-    const folded = lightCurvePoints
-      ? {
-          phase: lightCurvePoints.map((point) => {
-            if (Array.isArray(point)) {
-              const phase = Number(point[0]);
-              return Number.isFinite(phase) ? phase - 0.5 : 0;
-            }
-            const phase = Number((point as any)?.phase);
-            return Number.isFinite(phase) ? phase : 0;
-          }),
-          flux: lightCurvePoints.map((point) => {
-            if (Array.isArray(point)) {
-              const flux = Number(point[1]);
-              return Number.isFinite(flux) ? flux : 1;
-            }
-            const flux = Number((point as any)?.flux);
-            return Number.isFinite(flux) ? flux : 1;
-          }),
-        }
-      : undefined;
-
-    const flags: [string, string][] = [];
-    if (typeof (detail as any).odd_even_match !== 'undefined') {
-      flags.push(["Odd/Even match", (detail as any).odd_even_match ? '✓' : '✗']);
-    }
-    if (typeof (detail as any).no_secondary !== 'undefined') {
-      flags.push(["No secondary", (detail as any).no_secondary ? '✓' : '✗']);
-    }
-    if (typeof (detail as any).secondary_depth_fraction === 'number') {
-      const val = (detail as any).secondary_depth_fraction as number;
-      flags.push(["Secondary depth", `${(val * 100).toFixed(2)}%`]);
-    }
-
+    if (!detail || typeof detail !== 'object') return { notFound: true, detections: [] };
+    const star: StarMeta = { name: (detail as any).original_target || displayTarget };
+    const lc = Array.isArray((detail as any).light_curve_points) ? (detail as any).light_curve_points : [];
+    const folded = lc.length ? {
+      phase: lc.map((p: any) => Array.isArray(p) ? Number(p[0]) - 0.5 : Number(p.phase) || 0),
+      flux: lc.map((p: any) => Array.isArray(p) ? Number(p[1]) : Number(p.flux) || 1),
+    } : undefined;
     const rawProb = Number((detail as any).confidence ?? (detail as any).confidence_adjusted ?? 0);
-    const prob = Number.isFinite(rawProb) ? rawProb : 0;
-    const period = Number((detail as any).period_days ?? 0);
-    const aOverR = Number((detail as any).a_over_r_star ?? 0);
-    const sizeEarth = Number((detail as any).size_vs_earth ?? 0);
-
-    const detections: Detection[] = [
-      {
-        name: (detail as any).candidate_name || `${(star.name || displayTarget)}-candidate`,
-        prob,
-        period_days: Number.isFinite(period) ? period : 0,
-        a_rs: Number.isFinite(aOverR) ? aOverR : 0,
-        rp_re: Number.isFinite(sizeEarth) ? sizeEarth : 0,
-        depth: (detail as any).transit_depth_fraction,
-        eq_temp_k: (detail as any).equilibrium_temperature_k,
-        folded,
-        flags: flags.length ? flags : undefined,
-      },
-    ];
-
+    const detections: Detection[] = [{
+      name: (detail as any).candidate_name || `${(star.name || displayTarget)}-candidate`,
+      prob: Number.isFinite(rawProb) ? rawProb : 0,
+      period_days: Number((detail as any).period_days ?? 0) || 0,
+      a_rs: Number((detail as any).a_over_r_star ?? 0) || 0,
+      rp_re: Number((detail as any).size_vs_earth ?? 0) || 0,
+      depth: (detail as any).transit_depth_fraction,
+      eq_temp_k: (detail as any).equilibrium_temperature_k,
+      folded,
+      flags: undefined,
+    }];
     return { star, detections };
   } catch (error) {
     console.error('visual_frontend: falling back to demo data', error);

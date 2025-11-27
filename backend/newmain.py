@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, cast
 
 import os
 from fastapi import FastAPI, HTTPException
@@ -61,37 +61,64 @@ def _extract_target(config: Dict[str, Any]) -> str:
     raise HTTPException(status_code=400, detail="Configuration must include a target identifier (e.g. 'target_name').")
 
 
-def _coerce_config(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-    """Transform prediction payload into frontend-compatible format."""
-    results = payload.get("results")
-    if not isinstance(results, list) or not results:
-        raise ValueError("Result payload did not contain any target entries.")
+def _coerce_config(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Transform prediction payload into a multi-candidate format.
 
-    formatted: Dict[str, Dict[str, Any]] = {}
-    for entry in results:
+    Returns shape:
+    {
+      "star": "Kepler-10",
+      "candidates": [ { ... }, { ... } ],
+      "total_candidates": <int>,
+      "cached_timestamp": <iso str>?,
+    }
+    Backwards compatibility: also includes a legacy 'primary' field for UIs expecting single result.
+    """
+    raw_results = payload.get("results")
+    if not isinstance(raw_results, list) or not raw_results:
+        raise ValueError("Result payload did not contain any target entries.")
+    # Explicit cast for type-checkers
+    results = cast(List[Dict[str, Any]], raw_results)
+
+    star_name = str(results[0].get("target", "unknown")).strip() or "unknown"
+    ts = payload.get("timestamp")
+    aliases = payload.get("target_aliases")
+    checkpoint = payload.get("checkpoint")
+    device = payload.get("device")
+
+    candidates: List[Dict[str, Any]] = []
+    for i, entry in enumerate(results, start=1):
         if not isinstance(entry, dict):
             continue
-        
-        target = str(entry.get("target", "unknown")).strip() or "unknown"
-        detail = {k: v for k, v in entry.items() if k != "target"}
-        
-        # Add metadata from payload if not already present
-        metadata_mappings = [
-            ("original_target", "original_target"),
-            ("timestamp", "cached_timestamp"),
-            ("target_aliases", "target_aliases"),
-            ("checkpoint", "checkpoint_path"),
-            ("device", "device"),
-        ]
-        for payload_key, detail_key in metadata_mappings:
-            if payload.get(payload_key) and detail_key not in detail:
-                detail[detail_key] = payload[payload_key]
-        
-        formatted[target] = detail
-    
-    if not formatted:
-        raise ValueError("No valid target entries were found in the results list.")
-    return formatted
+        cand = dict(entry)  # shallow copy
+        cand.setdefault("candidate_index", i)
+        # Ensure presence of candidate_id
+        cand.setdefault("candidate_id", entry.get("candidate_id") or f"{star_name}.{i}")
+        candidates.append(cand)
+
+    if not candidates:
+        raise ValueError("No valid candidate entries were found in results.")
+
+    # Primary (first) candidate for legacy consumers
+    primary = dict(candidates[0])
+
+    # Inject metadata
+    if ts and "cached_timestamp" not in primary:
+        primary["cached_timestamp"] = ts
+    if aliases and "target_aliases" not in primary:
+        primary["target_aliases"] = aliases
+    if checkpoint and "checkpoint_path" not in primary:
+        primary["checkpoint_path"] = checkpoint
+    if device and "device" not in primary:
+        primary["device"] = device
+
+    return {
+        "star": star_name,
+        "total_candidates": len([c for c in candidates if c.get("has_candidate")]),
+        "candidates": candidates,
+        "primary": primary,
+        "cached_timestamp": ts,
+        "target_aliases": aliases,
+    }
 
 
 class PredictionRequest(BaseModel):
@@ -156,7 +183,7 @@ async def list_stars() -> Dict[str, List[str]]:
 
 
 @app.get("/db/stars/{target}")
-async def get_star(target: str) -> Dict[str, Dict[str, Any]]:
+async def get_star(target: str) -> Dict[str, Any]:
     cached = get_cached_result(target)
     if not cached:
         raise HTTPException(status_code=404, detail=f"No cached entry found for target '{target}'.")
@@ -172,7 +199,7 @@ async def mongo_stats() -> Dict[str, Any]:
 
 
 @app.post("/predict")
-async def predict_star(request: PredictionRequest) -> Dict[str, Dict[str, Any]]:
+async def predict_star(request: PredictionRequest) -> Dict[str, Any]:
     target_name = _extract_target(request.config)
 
     cached = get_cached_result(target_name)
@@ -187,12 +214,10 @@ async def predict_star(request: PredictionRequest) -> Dict[str, Dict[str, Any]]:
 
     if pipeline == "lightcurve":
         output = run_lightcurve(request.config, **kwargs)
-        
         wrapped_payload = {
-            "checkpoint": kwargs.get("checkpoint_path"), 
+            "checkpoint": kwargs.get("checkpoint_path"),
             "device": kwargs.get("device"),
-            # We assume the first result holds metadata if needed, or extract from output
-            "results": output["results"] 
+            "results": output["results"],
         }
     else:
         wrapped_payload = run_data_analyzer(request.config, **kwargs)

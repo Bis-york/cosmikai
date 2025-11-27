@@ -297,23 +297,43 @@ const runDetection = async () => {
      if (!entries.length) throw new Error('Unexpected empty response from backend.');
 
      setProgressStep('parsing-result');
-     const [target, details] = entries[0];   // same normalization as query path
-     const detection = {
-       target,
-       mission: details.mission ?? (mission === 'Other' ? customMission.trim() : mission),
-       confidence: Number(details.confidence ?? 0),
-       threshold: Number(details.threshold ?? confidenceThreshold),
-       hasCandidate: Boolean(details.has_candidate),
-       periodDays: details.period_days ?? null,
-       durationDays: details.duration_days ?? null,
-       transitTime: details.transit_time ?? null,
-       device: details.device ?? 'unknown',
-       nbins: details.nbins ?? nBins,
-       dataPoints: details.data_points ?? null,
-              lightCurve: details.light_curve_points ?? [],
-       raw: details,
-     };
-     setDetectionResults(detection);
+     if (resultJson && Array.isArray(resultJson.candidates)) {
+       const list = resultJson.candidates.map((c, idx) => ({
+         target: resultJson.star || c.target || 'unknown',
+         candidateId: c.candidate_id || `${resultJson.star || c.target}-cand-${idx+1}`,
+         mission: c.mission ?? (mission === 'Other' ? customMission.trim() : mission),
+         confidence: Number(c.confidence ?? 0),
+         threshold: Number(c.threshold ?? confidenceThreshold),
+         hasCandidate: Boolean(c.has_candidate),
+         periodDays: c.period_days ?? null,
+         durationDays: c.duration_days ?? null,
+         transitTime: c.transit_time ?? null,
+         device: c.device ?? 'unknown',
+         nbins: c.nbins ?? nBins,
+         dataPoints: c.data_points ?? null,
+         lightCurve: c.light_curve_points ?? [],
+         raw: c,
+       }));
+       setDetectionResults(list);
+     } else {
+       const [target, details] = entries[0];
+       const detection = {
+         target,
+         mission: details.mission ?? (mission === 'Other' ? customMission.trim() : mission),
+         confidence: Number(details.confidence ?? 0),
+         threshold: Number(details.threshold ?? confidenceThreshold),
+         hasCandidate: Boolean(details.has_candidate),
+         periodDays: details.period_days ?? null,
+         durationDays: details.duration_days ?? null,
+         transitTime: details.transit_time ?? null,
+         device: details.device ?? 'unknown',
+         nbins: details.nbins ?? nBins,
+         dataPoints: details.data_points ?? null,
+         lightCurve: details.light_curve_points ?? [],
+         raw: details,
+       };
+       setDetectionResults(detection);
+     }
      setProgressStep(null);
      setHistoryRefreshKey((k) => k + 1);
      setStatsRefreshKey((k) => k + 1);
@@ -380,24 +400,43 @@ const runDetection = async () => {
       }
 
       setProgressStep('parsing-result');
-      const [target, details] = entries[0];
-      const detection = {
-        target,
-        mission: details.mission ?? missionSelection,
-        confidence: typeof details.confidence === 'number' ? details.confidence : 0,
-        threshold: typeof details.threshold === 'number' ? details.threshold : confidenceThreshold,
-        hasCandidate: Boolean(details.has_candidate),
-        periodDays: details.period_days ?? null,
-        durationDays: details.duration_days ?? null,
-        transitTime: details.transit_time ?? null,
-        device: details.device ?? 'unknown',
-        nbins: details.nbins ?? nBins,
-        dataPoints: details.data_points ?? null,
-        lightCurve: details.light_curve_points ?? [],
-        raw: details,
-      };
-
-      setDetectionResults(detection);
+      if (resultJson && Array.isArray(resultJson.candidates)) {
+        const list = resultJson.candidates.map((c, idx) => ({
+          target: resultJson.star || c.target || trimmedStar,
+          candidateId: c.candidate_id || `${resultJson.star || c.target}-cand-${idx+1}`,
+          mission: c.mission ?? missionSelection,
+          confidence: typeof c.confidence === 'number' ? c.confidence : 0,
+          threshold: typeof c.threshold === 'number' ? c.threshold : confidenceThreshold,
+          hasCandidate: Boolean(c.has_candidate),
+          periodDays: c.period_days ?? null,
+          durationDays: c.duration_days ?? null,
+          transitTime: c.transit_time ?? null,
+          device: c.device ?? 'unknown',
+          nbins: c.nbins ?? nBins,
+          dataPoints: c.data_points ?? null,
+          lightCurve: c.light_curve_points ?? [],
+          raw: c,
+        }));
+        setDetectionResults(list);
+      } else {
+        const [target, details] = entries[0];
+        const detection = {
+          target,
+          mission: details.mission ?? missionSelection,
+          confidence: typeof details.confidence === 'number' ? details.confidence : 0,
+          threshold: typeof details.threshold === 'number' ? details.threshold : confidenceThreshold,
+          hasCandidate: Boolean(details.has_candidate),
+          periodDays: details.period_days ?? null,
+          durationDays: details.duration_days ?? null,
+          transitTime: details.transit_time ?? null,
+          device: details.device ?? 'unknown',
+          nbins: details.nbins ?? nBins,
+          dataPoints: details.data_points ?? null,
+          lightCurve: details.light_curve_points ?? [],
+          raw: details,
+        };
+        setDetectionResults(detection);
+      }
       setProgressStep(null);
       setHistoryRefreshKey((key) => key + 1);
       setStatsRefreshKey((key) => key + 1);
@@ -597,6 +636,50 @@ const DetectionResults = () => {
     }
 
     if (!detectionResults) return null;
+    // Multi-candidate (array)
+    if (Array.isArray(detectionResults)) {
+      if (!detectionResults.length) return null;
+      return (
+        <div className="space-y-6">
+          {detectionResults.map((det, idx) => (
+            <div key={det.candidateId || idx} className={`rounded-lg shadow-md p-6 ${det.hasCandidate ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'} border`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  {det.hasCandidate ? (
+                    <CheckCircle className="h-8 w-8 text-green-600 mr-3" />
+                  ) : (
+                    <XCircle className="h-8 w-8 text-gray-600 mr-3" />
+                  )}
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">
+                      {det.hasCandidate ? `🪐 Candidate ${idx + 1}` : `Signal ${idx + 1}`}
+                    </h2>
+                    <p className="text-gray-600">Confidence: {(det.confidence * 100).toFixed(1)}% (threshold {(det.threshold * 100).toFixed(0)}%)</p>
+                    <p className="text-sm text-gray-500">Target: {det.target} · Mission: {det.mission}</p>
+                  </div>
+                </div>
+              </div>
+              {det.hasCandidate && (
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="text-center p-4 bg-blue-50 rounded-lg">
+                    <div className="text-2xl font-bold text-blue-600">{det.periodDays ? det.periodDays.toFixed(2) : '—'}</div>
+                    <div className="text-sm text-gray-600">Period (days)</div>
+                  </div>
+                  <div className="text-center p-4 bg-purple-50 rounded-lg">
+                    <div className="text-2xl font-bold text-purple-600">{det.durationDays ? det.durationDays.toFixed(3) : '—'}</div>
+                    <div className="text-sm text-gray-600">Transit Duration</div>
+                  </div>
+                  <div className="text-center p-4 bg-green-50 rounded-lg">
+                    <div className="text-2xl font-bold text-green-600">{det.transitTime ? det.transitTime.toFixed(3) : '—'}</div>
+                    <div className="text-sm text-gray-600">Transit Time</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      );
+    }
 
     if (detectionResults.error) {
       return (
